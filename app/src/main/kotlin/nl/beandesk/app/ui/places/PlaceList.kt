@@ -1,109 +1,220 @@
 package nl.beandesk.app.ui.places
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ListItem
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import nl.beandesk.app.R
 import nl.beandesk.core.hours.OpenStatus
-import nl.beandesk.core.model.Place
+import nl.beandesk.core.model.Category
 
+@OptIn(ExperimentalComposeUiApi::class) // pluralStringResource, in older Compose versions
 @Composable
 fun PlaceList(
     items: List<PlaceItem>,
+    totalCount: Int,
+    isRefreshing: Boolean,
     attribution: String,
     onPlaceClick: (Long) -> Unit,
+    onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(modifier) {
+    LazyColumn(
+        modifier = modifier,
+        // Bottom padding keeps the last card clear of the floating map button.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         if (items.isEmpty()) {
-            item { Text(stringResource(R.string.no_places), Modifier.padding(16.dp)) }
+            if (!isRefreshing) {
+                item { EmptyState(filtered = totalCount > 0, onClearFilters = onClearFilters) }
+            }
+        } else {
+            item {
+                Text(
+                    text = if (items.size == totalCount) {
+                        pluralStringResource(R.plurals.places_count, totalCount, totalCount)
+                    } else {
+                        pluralStringResource(R.plurals.places_count_filtered, totalCount, items.size, totalCount)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         items(items, key = { it.place.id }) { item ->
-            ListItem(
-                headlineContent = { Text(item.place.name) },
-                supportingContent = {
-                    Text(listOfNotNull(statusText(item.status), item.place.address).joinToString(" · "))
-                },
-                modifier = Modifier.clickable { onPlaceClick(item.place.id) },
-            )
+            PlaceCard(item, onClick = { onPlaceClick(item.place.id) })
         }
-        item {
-            Text(attribution, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(16.dp))
+        if (attribution.isNotEmpty()) {
+            item {
+                Text(
+                    text = attribution,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PlaceCard(
-    item: PlaceItem,
-    onRoute: () -> Unit,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    ElevatedCard(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(item.place.name, style = MaterialTheme.typography.titleMedium)
-            item.place.address?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-            Text(statusText(item.status), style = MaterialTheme.typography.bodyMedium)
-            Text(factsText(item.place), style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onRoute) { Text(stringResource(R.string.route)) }
-                TextButton(onClick = onClose) { Text(stringResource(R.string.close)) }
+private fun PlaceCard(item: PlaceItem, onClick: () -> Unit) {
+    val place = item.place
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(16.dp)) {
+            CategoryBadge(place.category, size = 48.dp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = place.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = listOfNotNull(stringResource(place.category.labelRes), place.address).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                StatusLine(item.status)
+                val chips = factChips(place)
+                if (chips.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.no_reports_yet),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        chips.forEach { FactPill(it) }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun statusText(status: OpenStatus): String = when (status) {
-    is OpenStatus.Open -> status.minutesUntilClose
-        ?.let { stringResource(R.string.status_open_closes_in, durationText(it)) }
-        ?: stringResource(R.string.status_always_open)
-    is OpenStatus.Closed -> status.minutesUntilOpen
-        ?.let { stringResource(R.string.status_closed_opens_in, durationText(it)) }
-        ?: stringResource(R.string.status_closed)
-    OpenStatus.Unknown -> stringResource(R.string.status_unknown)
+fun CategoryBadge(category: Category, size: Dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(category.iconRes),
+            contentDescription = stringResource(category.labelRes),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.size(size / 2),
+        )
+    }
 }
 
+/** A coloured dot with "Nu open · sluit over 2 u" and the like. */
 @Composable
-private fun durationText(minutes: Int): String {
-    val hours = minutes / 60
-    val rest = minutes % 60
-    return when {
-        hours == 0 -> stringResource(R.string.duration_minutes, rest)
-        hours >= 24 -> stringResource(R.string.duration_more_than_a_day)
-        rest == 0 -> stringResource(R.string.duration_hours, hours)
-        else -> stringResource(R.string.duration_hours_minutes, hours, rest)
+fun StatusLine(status: OpenStatus) {
+    val color = statusColor(status)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = statusText(status),
+            style = MaterialTheme.typography.labelLarge,
+            color = color,
+        )
     }
 }
 
 @Composable
-private fun factsText(place: Place): String {
-    val wifi = yesNoUnknown(place.hasWifi)
-    val power = yesNoUnknown(place.hasPower)
-    return stringResource(R.string.place_facts, wifi, power)
+private fun FactPill(chip: FactChip) {
+    val container = if (chip.warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
+    val content = if (chip.warning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+    Surface(shape = RoundedCornerShape(50), color = container, contentColor = content) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(painterResource(chip.iconRes), contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(stringResource(chip.labelRes), style = MaterialTheme.typography.labelMedium)
+        }
+    }
 }
 
 @Composable
-private fun yesNoUnknown(value: Boolean?): String = stringResource(
-    when (value) {
-        true -> R.string.yes
-        false -> R.string.no
-        null -> R.string.unknown
-    },
-)
+private fun EmptyState(filtered: Boolean, onClearFilters: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.no_places_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = stringResource(if (filtered) R.string.no_places_filtered else R.string.no_places_loaded),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        if (filtered) {
+            TextButton(onClick = onClearFilters) { Text(stringResource(R.string.clear_filters)) }
+        }
+    }
+}

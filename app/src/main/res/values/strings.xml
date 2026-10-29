@@ -1,19 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BeanDesk</string>
+    <string name="places_title">Werkplekken</string>
 
     <string name="show_list">Lijst</string>
     <string name="show_map">Kaart</string>
 
+    <plurals name="places_count">
+        <item quantity="one">%d plek</item>
+        <item quantity="other">%d plekken</item>
+    </plurals>
+    <plurals name="places_count_filtered">
+        <item quantity="one">%1$d van %2$d plek</item>
+        <item quantity="other">%1$d van %2$d plekken</item>
+    </plurals>
+
+    <string name="filter_open_now">Nu open</string>
     <string name="filter_wifi">Wifi</string>
     <string name="filter_power">Stopcontacten</string>
-    <string name="filter_open_now">Nu open</string>
-    <string name="filter_quiet">Rustig</string>
     <string name="filter_laptop">Laptop ok</string>
+    <string name="filter_quiet">Rustig</string>
 
     <string name="category_cafe">Cafés</string>
     <string name="category_library">Bibliotheken</string>
     <string name="category_coworking">Coworking</string>
+    <string name="category_cafe_one">Café</string>
+    <string name="category_library_one">Bibliotheek</string>
+    <string name="category_coworking_one">Coworking</string>
 
     <string name="status_open_closes_in">Nu open · sluit over %1$s</string>
     <string name="status_always_open">Altijd open</string>
@@ -26,15 +39,47 @@
     <string name="duration_hours_minutes">%1$d u %2$d min</string>
     <string name="duration_more_than_a_day">ruim een dag</string>
 
-    <string name="place_facts">Wifi: %1$s · Stopcontacten: %2$s</string>
-    <string name="yes">ja</string>
-    <string name="no">nee</string>
-    <string name="unknown">onbekend</string>
+    <string name="chip_wifi">Wifi</string>
+    <string name="chip_wifi_fast">Snelle wifi</string>
+    <string name="chip_wifi_slow">Trage wifi</string>
+    <string name="chip_power">Stopcontacten</string>
+    <string name="chip_power_many">Veel stopcontacten</string>
+    <string name="chip_laptop_ok">Laptop welkom</string>
+    <string name="chip_laptop_weekdays">Laptop doordeweeks</string>
+    <string name="chip_laptop_no">Geen laptops</string>
+    <string name="chip_quiet">Rustig</string>
+    <string name="no_reports_yet">Nog niets bekend over wifi en stopcontacten</string>
+
+    <string name="fact_label_wifi">Wifi</string>
+    <string name="fact_label_power">Stopcontacten</string>
+    <string name="fact_label_laptop">Laptop</string>
+    <string name="fact_label_quiet">Drukte</string>
+    <string name="fact_label_hours">Openingstijden</string>
+    <string name="fact_yes">Ja</string>
+    <string name="fact_unknown">Onbekend</string>
+    <string name="fact_wifi_none">Geen</string>
+    <string name="fact_wifi_slow">Traag</string>
+    <string name="fact_wifi_fast">Snel</string>
+    <string name="fact_wifi_free">Ja, gratis</string>
+    <string name="fact_power_none">Geen</string>
+    <string name="fact_power_few">Weinig</string>
+    <string name="fact_power_many">Veel</string>
+    <string name="fact_laptop_ok">Welkom</string>
+    <string name="fact_laptop_weekdays">Niet in het weekend</string>
+    <string name="fact_laptop_no">Niet toegestaan</string>
+    <string name="fact_quiet_yes">Meestal rustig</string>
+    <string name="fact_quiet_no">Vaak druk</string>
+    <string name="source_users">volgens gebruikers</string>
+    <string name="source_osm">volgens OpenStreetMap</string>
 
     <string name="route">Route</string>
+    <string name="show_on_map">Op kaart</string>
     <string name="route_unavailable">Geen app gevonden om de route te openen</string>
-    <string name="close">Sluiten</string>
-    <string name="no_places">Geen zaken gevonden met deze filters.</string>
-    <string name="refresh_failed">Zaken bijwerken is mislukt.</string>
+
+    <string name="no_places_title">Geen plekken gevonden</string>
+    <string name="no_places_filtered">Geen plek voldoet aan alle filters.</string>
+    <string name="no_places_loaded">Er zijn nog geen plekken geladen.</string>
+    <string name="clear_filters">Filters wissen</string>
+    <string name="refresh_failed">Plekken bijwerken is mislukt.</string>
     <string name="retry">Opnieuw</string>
 </resources>

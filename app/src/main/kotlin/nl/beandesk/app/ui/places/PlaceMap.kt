@@ -16,6 +16,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import nl.beandesk.core.model.LatLng
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -34,15 +35,18 @@ private const val SOURCE_ID = "places"
 private const val LAYER_ID = "places-circles"
 private const val PLACE_ID = "id"
 private const val CITY_ZOOM = 13.0
+private const val PLACE_ZOOM = 15.5
 
 /**
- * MapLibre map with one circle per place. TODO for the MVP: the user's own location
- * (blue dot), which needs the location permission flow from the plan.
+ * MapLibre map with one circle per place. The camera starts on [center] and moves to [focus]
+ * whenever that changes. TODO for the MVP: the user's own location (blue dot), which needs the
+ * location permission flow from the plan.
  */
 @Composable
 fun PlaceMap(
     items: List<PlaceItem>,
     center: LatLng?,
+    focus: LatLng?,
     styleUrl: String,
     onPlaceClick: (Long?) -> Unit,
     modifier: Modifier = Modifier,
@@ -89,13 +93,16 @@ fun PlaceMap(
         style?.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
-    // Moves the camera once, when the city is known; after that the user is in control.
-    LaunchedEffect(map, center) {
-        val target = center ?: return@LaunchedEffect
+    // A place to focus on wins; otherwise the camera jumps to the city once,
+    // after which the user is in control.
+    LaunchedEffect(map, center, focus) {
         val loadedMap = map ?: return@LaunchedEffect
-        if (!centered) {
+        if (focus != null) {
+            loadedMap.animateCamera(CameraUpdateFactory.newLatLngZoom(MapLatLng(focus.lat, focus.lng), PLACE_ZOOM))
+            centered = true
+        } else if (center != null && !centered) {
             loadedMap.cameraPosition = CameraPosition.Builder()
-                .target(MapLatLng(target.lat, target.lng))
+                .target(MapLatLng(center.lat, center.lng))
                 .zoom(CITY_ZOOM)
                 .build()
             centered = true
