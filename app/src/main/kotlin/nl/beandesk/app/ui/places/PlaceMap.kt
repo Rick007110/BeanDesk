@@ -33,20 +33,24 @@ import org.maplibre.android.geometry.LatLng as MapLatLng
 
 private const val SOURCE_ID = "places"
 private const val LAYER_ID = "places-circles"
+private const val USER_SOURCE_ID = "user-location"
+private const val USER_LAYER_ID = "user-location-dot"
 private const val PLACE_ID = "id"
 private const val CITY_ZOOM = 13.0
 private const val PLACE_ZOOM = 15.5
 
 /**
- * MapLibre map with one circle per place. The camera starts on [center] and moves to [focus]
- * whenever that changes. TODO for the MVP: the user's own location (blue dot), which needs the
- * location permission flow from the plan.
+ * MapLibre map with one circle per place and a blue dot for the user. The camera starts on
+ * [center], moves to [focus] whenever that changes, and to [userLocation] each time
+ * [recenterRequests] goes up.
  */
 @Composable
 fun PlaceMap(
     items: List<PlaceItem>,
     center: LatLng?,
     focus: LatLng?,
+    userLocation: LatLng?,
+    recenterRequests: Int,
     styleUrl: String,
     onPlaceClick: (Long?) -> Unit,
     modifier: Modifier = Modifier,
@@ -72,6 +76,16 @@ fun PlaceMap(
                         circleStrokeColor("#FFFFFF"),
                     ),
                 )
+                // Added last, so the user's dot is drawn on top of the places.
+                loadedStyle.addSource(GeoJsonSource(USER_SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
+                loadedStyle.addLayer(
+                    CircleLayer(USER_LAYER_ID, USER_SOURCE_ID).withProperties(
+                        circleRadius(8f),
+                        circleColor("#1A73E8"),
+                        circleStrokeWidth(3f),
+                        circleStrokeColor("#FFFFFF"),
+                    ),
+                )
                 style = loadedStyle
             }
             loadedMap.addOnMapClickListener { point ->
@@ -91,6 +105,21 @@ fun PlaceMap(
             }
         }
         style?.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(features))
+    }
+
+    LaunchedEffect(style, userLocation) {
+        val features = listOfNotNull(userLocation?.let { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) })
+        style?.getSourceAs<GeoJsonSource>(USER_SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(features))
+    }
+
+    // The "my location" button; the first composition (0) does not move the camera.
+    LaunchedEffect(map, recenterRequests) {
+        val loadedMap = map ?: return@LaunchedEffect
+        val here = userLocation ?: return@LaunchedEffect
+        if (recenterRequests > 0) {
+            loadedMap.animateCamera(CameraUpdateFactory.newLatLngZoom(MapLatLng(here.lat, here.lng), PLACE_ZOOM))
+            centered = true
+        }
     }
 
     // A place to focus on wins; otherwise the camera jumps to the city once,

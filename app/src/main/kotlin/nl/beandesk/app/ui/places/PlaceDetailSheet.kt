@@ -1,6 +1,8 @@
 package nl.beandesk.app.ui.places
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,12 +38,14 @@ fun PlaceDetailSheet(
     onDismiss: () -> Unit,
     onRoute: () -> Unit,
     onShowOnMap: () -> Unit,
+    onReport: () -> Unit,
 ) {
     val place = item.place
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -54,7 +59,7 @@ fun PlaceDetailSheet(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = listOfNotNull(stringResource(place.category.labelRes), place.address).joinToString(" · "),
+                        text = placeSubtitle(item),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -82,6 +87,26 @@ fun PlaceDetailSheet(
                 value = place.openingHours ?: stringResource(R.string.fact_unknown),
                 source = null,
             )
+
+            HorizontalDivider()
+
+            // "Klopt dit nog?": the quickest way for users to add or confirm what they see.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.report_prompt_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.report_prompt_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                FilledTonalButton(onClick = onReport) { Text(stringResource(R.string.report_open)) }
+            }
         }
     }
 }

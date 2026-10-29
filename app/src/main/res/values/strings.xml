@@ -83,6 +83,30 @@
     <string name="refresh_failed">Plekken bijwerken is mislukt.</string>
     <string name="retry">Opnieuw</string>
 
+    <string name="location_prompt_title">Plekken bij jou in de buurt</string>
+    <string name="location_prompt_body">Deel je locatie om de dichtstbijzijnde plekken bovenaan te zien. Je locatie blijft op je telefoon.</string>
+    <string name="location_prompt_precise_title">Je deelt een globale locatie</string>
+    <string name="location_prompt_precise_body">Afstanden zijn daardoor een schatting van een paar kilometer. Met een precieze locatie klopt "dichtstbij".</string>
+    <string name="location_use">Locatie gebruiken</string>
+    <string name="location_use_precise">Precieze locatie</string>
+    <string name="not_now">Niet nu</string>
+    <string name="my_location">Mijn locatie</string>
+
+    <string name="report_prompt_title">Klopt dit nog?</string>
+    <string name="report_prompt_body">Laat in een paar tikken weten wat je nu ziet.</string>
+    <string name="report_open">Melden</string>
+    <string name="report_title">Wat klopt er nu?</string>
+    <string name="report_quiet">Rustig</string>
+    <string name="report_busy">Druk</string>
+    <string name="report_closed">Deze plek is permanent gesloten</string>
+    <string name="report_send">Versturen</string>
+    <string name="report_anonymous">Anoniem: je hoeft geen account te maken.</string>
+    <string name="report_sample_mode">Voorbeeldmodus: je melding blijft op deze telefoon.</string>
+    <string name="report_sent">Bedankt! Je melding is verstuurd.</string>
+    <string name="report_saved_locally">Opgeslagen op je telefoon (voorbeeldmodus).</string>
+    <string name="report_rate_limited">Je hebt vandaag al veel gemeld. Probeer het morgen opnieuw.</string>
+    <string name="report_failed">Versturen is mislukt. Probeer het zo opnieuw.</string>
+
     <string name="app_icon_title">App-icoon</string>
     <string name="app_icon_hint">Je nieuwe icoon verschijnt op je startscherm en in je app-lijst zodra je de app verlaat. Staat BeanDesk op je startscherm, dan moet je hem daar op sommige telefoons opnieuw neerzetten.</string>
     <string name="app_icon_espresso">Espresso</string>

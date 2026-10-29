@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -25,12 +27,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +49,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import nl.beandesk.app.BuildConfig
 import nl.beandesk.app.R
@@ -51,43 +59,80 @@ import nl.beandesk.app.icon.AppIconManager
 import nl.beandesk.core.filter.PlaceFilter
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.Place
+import nl.beandesk.core.model.Report
 import nl.beandesk.core.route.RouteLinks
 
 @Composable
 fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var appIcon by remember { mutableStateOf(appIconManager.selected()) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { message ->
+            snackbarHostState.showSnackbar(context.getString(message.textRes))
+        }
+    }
+
     PlacesContent(
         state = state,
+        snackbarHostState = snackbarHostState,
         appIcon = appIcon,
         onAppIconChange = { icon ->
             appIconManager.select(icon)
             appIcon = icon
         },
+        onLocationGranted = viewModel::setLocationGranted,
         onFilterChange = viewModel::setFilter,
         onClearFilters = viewModel::clearFilters,
         onSelect = viewModel::select,
         onShowOnMap = viewModel::showOnMap,
         onToggleList = viewModel::toggleList,
         onRetry = viewModel::refresh,
+        onReport = viewModel::report,
     )
 }
+
+private val PlacesMessage.textRes: Int
+    get() = when (this) {
+        PlacesMessage.REPORT_SENT -> R.string.report_sent
+        PlacesMessage.REPORT_SAVED_LOCALLY -> R.string.report_saved_locally
+        PlacesMessage.REPORT_RATE_LIMITED -> R.string.report_rate_limited
+        PlacesMessage.REPORT_FAILED -> R.string.report_failed
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlacesContent(
     state: PlacesUiState,
+    snackbarHostState: SnackbarHostState,
     appIcon: AppIcon,
     onAppIconChange: (AppIcon) -> Unit,
+    onLocationGranted: (Boolean) -> Unit,
     onFilterChange: (PlaceFilter) -> Unit,
     onClearFilters: () -> Unit,
     onSelect: (Long?) -> Unit,
     onShowOnMap: (Long) -> Unit,
     onToggleList: () -> Unit,
     onRetry: () -> Unit,
+    onReport: (Report, (Boolean) -> Unit) -> Unit,
 ) {
     val context = LocalContext.current
     var showIconSheet by rememberSaveable { mutableStateOf(false) }
+    var reportPlaceId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var recenterRequests by rememberSaveable { mutableIntStateOf(0) }
+
+    // Location: re-checked on every resume, since the user can change it in the system settings.
+    var locationAccess by remember { mutableStateOf(context.locationAccess()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { locationAccess = context.locationAccess() }
+    LaunchedEffect(locationAccess) { onLocationGranted(locationAccess != LocationAccess.NONE) }
+    var locationPromptDismissed by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        locationAccess = context.locationAccess()
+        // Asked once and still no precise location: no more nagging this session.
+        if (locationAccess != LocationAccess.PRECISE) locationPromptDismissed = true
+    }
 
     // The map loads tiles, so it is only created once someone opens it; after that it stays
     // under the list, so it keeps its camera position.
@@ -133,6 +178,7 @@ private fun PlacesContent(
                 if (state.hasError) ErrorBanner(onRetry)
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 text = { Text(stringResource(if (state.showList) R.string.show_map else R.string.show_list)) },
@@ -157,6 +203,8 @@ private fun PlacesContent(
                     items = state.items,
                     center = state.center,
                     focus = state.focus,
+                    userLocation = state.userLocation,
+                    recenterRequests = recenterRequests,
                     styleUrl = BuildConfig.MAP_STYLE_URL,
                     onPlaceClick = onSelect,
                     modifier = Modifier.fillMaxSize(),
@@ -173,18 +221,66 @@ private fun PlacesContent(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
+                    header = if (!locationPromptDismissed && locationAccess != LocationAccess.PRECISE) {
+                        {
+                            LocationPrompt(
+                                access = locationAccess,
+                                onRequest = { permissionLauncher.launch(LOCATION_PERMISSIONS) },
+                                onDismiss = { locationPromptDismissed = true },
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
+            } else {
+                SmallFloatingActionButton(
+                    onClick = {
+                        if (locationAccess == LocationAccess.NONE) {
+                            permissionLauncher.launch(LOCATION_PERMISSIONS)
+                        } else {
+                            recenterRequests++
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_my_location),
+                        contentDescription = stringResource(R.string.my_location),
+                    )
+                }
             }
         }
     }
 
-    state.selected?.let { item ->
+    val selected = state.selected
+    val reporting = reportPlaceId
+    if (selected != null && reporting == selected.place.id) {
+        ReportSheet(
+            place = selected.place,
+            isSending = state.isSendingReport,
+            sendsReports = state.sendsReports,
+            onSend = { report ->
+                onReport(report) { done ->
+                    // Close both sheets, so the snackbar with the result is visible.
+                    if (done) {
+                        reportPlaceId = null
+                        onSelect(null)
+                    }
+                }
+            },
+            onDismiss = { reportPlaceId = null },
+        )
+    } else if (selected != null) {
         PlaceDetailSheet(
-            item = item,
+            item = selected,
             showMapButton = state.showList,
             onDismiss = { onSelect(null) },
-            onRoute = { openRoute(context, item.place) },
-            onShowOnMap = { onShowOnMap(item.place.id) },
+            onRoute = { openRoute(context, selected.place) },
+            onShowOnMap = { onShowOnMap(selected.place.id) },
+            onReport = { reportPlaceId = selected.place.id },
         )
     }
 
@@ -196,6 +292,7 @@ private fun PlacesContent(
         )
     }
 }
+
 
 @Composable
 private fun FilterBar(filter: PlaceFilter, onChange: (PlaceFilter) -> Unit) {

@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -22,7 +23,9 @@ android {
         versionCode = providers.gradleProperty("beandesk.versionCode").orNull?.toInt() ?: 1
         versionName = beanDeskProperty("versionName")
 
-        buildConfigField("String", "CITY_EXPORT_BASE_URL", "\"${beanDeskProperty("cityExportBaseUrl")}\"")
+        // Empty until there is a Supabase project; the anon key is public by design.
+        buildConfigField("String", "SUPABASE_URL", "\"${beanDeskProperty("supabaseUrl").trimEnd('/')}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${beanDeskProperty("supabaseAnonKey")}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${beanDeskProperty("mapStyleUrl")}\"")
         buildConfigField("String", "DEFAULT_CITY", "\"${beanDeskProperty("defaultCity")}\"")
     }
@@ -82,10 +85,16 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
 
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+
     implementation(libs.maplibre.android)
+    implementation(libs.play.services.location)
 
     testImplementation(libs.kotlin.test.junit)
 }
