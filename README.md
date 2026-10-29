@@ -118,5 +118,7 @@ De databasefunctie `city_export()` schrijft het formaat, `core/.../export/CityEx
 - [ ] Detailpagina met openingstijden per dag
 - [ ] Zoeken op naam of buurt
 - [ ] Tegelprovider kiezen en de kaartstijl instellen
+- [ ] CAPTCHA (hCaptcha of Turnstile) bij anoniem inloggen, vóór de launch; tijdens het testen staat CAPTCHA-bescherming in Supabase uit
+- [ ] Opruimen van oude anonieme accounts zonder meldingen
 - [ ] Privacyverklaring en "account verwijderen" in de app
 - [ ] Seeding: 30-50 zaken in een of twee buurten
