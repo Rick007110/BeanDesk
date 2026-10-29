@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -13,12 +14,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -29,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,16 +46,24 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import nl.beandesk.app.BuildConfig
 import nl.beandesk.app.R
+import nl.beandesk.app.icon.AppIcon
+import nl.beandesk.app.icon.AppIconManager
 import nl.beandesk.core.filter.PlaceFilter
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.route.RouteLinks
 
 @Composable
-fun PlacesScreen(viewModel: PlacesViewModel) {
+fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var appIcon by remember { mutableStateOf(appIconManager.selected()) }
     PlacesContent(
         state = state,
+        appIcon = appIcon,
+        onAppIconChange = { icon ->
+            appIconManager.select(icon)
+            appIcon = icon
+        },
         onFilterChange = viewModel::setFilter,
         onClearFilters = viewModel::clearFilters,
         onSelect = viewModel::select,
@@ -65,6 +77,8 @@ fun PlacesScreen(viewModel: PlacesViewModel) {
 @Composable
 private fun PlacesContent(
     state: PlacesUiState,
+    appIcon: AppIcon,
+    onAppIconChange: (AppIcon) -> Unit,
     onFilterChange: (PlaceFilter) -> Unit,
     onClearFilters: () -> Unit,
     onSelect: (Long?) -> Unit,
@@ -73,6 +87,7 @@ private fun PlacesContent(
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showIconSheet by rememberSaveable { mutableStateOf(false) }
 
     // The map loads tiles, so it is only created once someone opens it; after that it stays
     // under the list, so it keeps its camera position.
@@ -85,6 +100,15 @@ private fun PlacesContent(
         topBar = {
             Column {
                 TopAppBar(
+                    navigationIcon = {
+                        Image(
+                            painter = painterResource(appIcon.badgeRes),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .padding(start = 12.dp, end = 4.dp)
+                                .size(36.dp),
+                        )
+                    },
                     title = {
                         Column {
                             Text(stringResource(R.string.places_title), fontWeight = FontWeight.SemiBold)
@@ -92,6 +116,14 @@ private fun PlacesContent(
                                 text = state.cityName,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showIconSheet = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_palette),
+                                contentDescription = stringResource(R.string.app_icon_title),
                             )
                         }
                     },
@@ -153,6 +185,14 @@ private fun PlacesContent(
             onDismiss = { onSelect(null) },
             onRoute = { openRoute(context, item.place) },
             onShowOnMap = { onShowOnMap(item.place.id) },
+        )
+    }
+
+    if (showIconSheet) {
+        AppIconSheet(
+            selected = appIcon,
+            onSelect = onAppIconChange,
+            onDismiss = { showIconSheet = false },
         )
     }
 }

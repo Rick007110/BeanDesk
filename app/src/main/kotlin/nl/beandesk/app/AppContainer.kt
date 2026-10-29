@@ -9,6 +9,7 @@ import nl.beandesk.app.data.local.BeanDeskDatabase
 import nl.beandesk.app.data.remote.CityExportClient
 import nl.beandesk.app.data.remote.CityExportSource
 import nl.beandesk.app.data.remote.SampleCityExportSource
+import nl.beandesk.app.icon.AppIconManager
 
 /** Manual dependency injection; small enough that a DI framework is not worth it yet. */
 class AppContainer(context: Context) {
@@ -29,4 +30,6 @@ class AppContainer(context: Context) {
         dao = database.placeDao(),
         source = exportSource,
     )
+
+    val appIconManager = AppIconManager(context)
 }

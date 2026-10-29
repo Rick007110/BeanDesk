@@ -82,4 +82,12 @@
     <string name="clear_filters">Filters wissen</string>
     <string name="refresh_failed">Plekken bijwerken is mislukt.</string>
     <string name="retry">Opnieuw</string>
+
+    <string name="app_icon_title">App-icoon</string>
+    <string name="app_icon_hint">Je nieuwe icoon verschijnt op je startscherm en in je app-lijst zodra je de app verlaat. Staat BeanDesk op je startscherm, dan moet je hem daar op sommige telefoons opnieuw neerzetten.</string>
+    <string name="app_icon_espresso">Espresso</string>
+    <string name="app_icon_terracotta">Terracotta</string>
+    <string name="app_icon_crema">Crema</string>
+    <string name="app_icon_teal">Teal</string>
+    <string name="app_icon_night">Nacht</string>
 </resources>

@@ -1,3 +1,5 @@
+<img src="docs/brand/icon-rounded.svg" width="88" alt="BeanDesk-logo">
+
 # BeanDesk
 
 Android-app die laat zien welke koffiezaak, bibliotheek of coworkingruimte in de buurt geschikt is om met je laptop te werken: met wifi, stopcontacten en rust. Het plan staat in [Plan: Laptop-friendly koffie-app (Android)](https://claude.ai/artifact/APAtzUqy63MBkCzR6YKeRk).
@@ -13,6 +15,7 @@ Het import-script haalt de zaken van een stad uit OpenStreetMap en zet ze in Sup
 | `supabase/` | Databaseschema, RLS-regels, triggers en de lokale Supabase-config |
 | `importer/` | Python-script voor de OSM-import en de stad-export |
 | `.github/workflows/` | CI en het schema dat de stad-data ververst |
+| `docs/brand/` | Logo, kleuren en het script dat alle logobestanden maakt |
 
 ## Aan de slag
 
