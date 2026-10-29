@@ -1,3 +1,5 @@
+<img src="docs/brand/icon-rounded.svg" width="88" alt="BeanDesk-logo">
+
 # BeanDesk
 
 Android-app die laat zien welke koffiezaak, bibliotheek of coworkingruimte in de buurt geschikt is om met je laptop te werken: met wifi, stopcontacten en rust. Het plan staat in [Plan: Laptop-friendly koffie-app (Android)](https://claude.ai/artifact/APAtzUqy63MBkCzR6YKeRk).
@@ -13,6 +15,7 @@ Het import-script haalt de zaken van een stad uit OpenStreetMap en zet ze in Sup
 | `supabase/` | Databaseschema, RLS-regels, triggers en de lokale Supabase-config |
 | `importer/` | Python-script voor de OSM-import en de stad-export |
 | `.github/workflows/` | CI en het schema dat de stad-data ververst |
+| `docs/brand/` | Logo, kleuren en het script dat alle logobestanden maakt |
 
 ## Aan de slag
 
@@ -20,12 +23,15 @@ Het import-script haalt de zaken van een stad uit OpenStreetMap en zet ze in Sup
 
 Nodig: een recente Android Studio en JDK 21.
 
-1. Open de map in Android Studio.
-2. Zet de URL van je eigen stad-export in `~/.gradle/gradle.properties`, zodat die niet in de repo komt:
+1. Open de map in Android Studio en start de app op een emulator of telefoon.
+2. Een debug-build toont standaard twaalf verzonnen voorbeeldzaken in Utrecht (`app/src/debug/assets/sample/utrecht.json`). Daarmee probeer je de kaart, de lijst, de filters en de routeknop zonder Supabase.
+3. Staat je eigen stad-export klaar, zet dan in `~/.gradle/gradle.properties` de URL en zet de voorbeelddata uit. Zo komen ze niet in de repo:
    ```properties
    beandesk.cityExportBaseUrl=https://<project-ref>.supabase.co/storage/v1/object/public/city-exports
+   beandesk.useSampleData=false
    ```
-3. Start de app. Zolang er geen export is, toont hij de kaart met een melding en de knop "Opnieuw".
+
+Elke CI-run bewaart ook de debug-APK als artifact (`beandesk-debug-apk`), die je zo op een emulator kunt slepen.
 
 De logica in `core` test je zo:
 

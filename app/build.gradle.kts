@@ -27,7 +27,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Reads the bundled sample (src/debug/assets/sample) instead of the Supabase export.
+            val useSample = beanDeskProperty("useSampleData").toBooleanStrict()
+            buildConfigField("boolean", "USE_SAMPLE_DATA", useSample.toString())
+        }
         release {
+            // Release builds have no sample assets and always use the real export.
+            buildConfigField("boolean", "USE_SAMPLE_DATA", "false")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -67,4 +74,6 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
 
     implementation(libs.maplibre.android)
+
+    testImplementation(libs.kotlin.test.junit)
 }

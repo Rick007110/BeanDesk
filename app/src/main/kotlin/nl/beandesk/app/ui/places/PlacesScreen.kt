@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -13,97 +14,186 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import nl.beandesk.app.BuildConfig
 import nl.beandesk.app.R
+import nl.beandesk.app.icon.AppIcon
+import nl.beandesk.app.icon.AppIconManager
 import nl.beandesk.core.filter.PlaceFilter
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.route.RouteLinks
 
 @Composable
-fun PlacesScreen(viewModel: PlacesViewModel) {
+fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var appIcon by remember { mutableStateOf(appIconManager.selected()) }
     PlacesContent(
         state = state,
+        appIcon = appIcon,
+        onAppIconChange = { icon ->
+            appIconManager.select(icon)
+            appIcon = icon
+        },
         onFilterChange = viewModel::setFilter,
+        onClearFilters = viewModel::clearFilters,
         onSelect = viewModel::select,
+        onShowOnMap = viewModel::showOnMap,
         onToggleList = viewModel::toggleList,
         onRetry = viewModel::refresh,
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlacesContent(
     state: PlacesUiState,
+    appIcon: AppIcon,
+    onAppIconChange: (AppIcon) -> Unit,
     onFilterChange: (PlaceFilter) -> Unit,
+    onClearFilters: () -> Unit,
     onSelect: (Long?) -> Unit,
+    onShowOnMap: (Long) -> Unit,
     onToggleList: () -> Unit,
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showIconSheet by rememberSaveable { mutableStateOf(false) }
+
+    // The map loads tiles, so it is only created once someone opens it; after that it stays
+    // under the list, so it keeps its camera position.
+    var mapOpened by rememberSaveable { mutableStateOf(!state.showList) }
+    LaunchedEffect(state.showList) {
+        if (!state.showList) mapOpened = true
+    }
+
     Scaffold(
-        floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onToggleList) {
-                Text(stringResource(if (state.showList) R.string.show_map else R.string.show_list))
+        topBar = {
+            Column {
+                TopAppBar(
+                    navigationIcon = {
+                        Image(
+                            painter = painterResource(appIcon.badgeRes),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .padding(start = 12.dp, end = 4.dp)
+                                .size(36.dp),
+                        )
+                    },
+                    title = {
+                        Column {
+                            Text(stringResource(R.string.places_title), fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = state.cityName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showIconSheet = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_palette),
+                                contentDescription = stringResource(R.string.app_icon_title),
+                            )
+                        }
+                    },
+                )
+                FilterBar(state.filter, onFilterChange)
+                if (state.isRefreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (state.hasError) ErrorBanner(onRetry)
             }
         },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                text = { Text(stringResource(if (state.showList) R.string.show_map else R.string.show_list)) },
+                icon = {
+                    Icon(
+                        painter = painterResource(if (state.showList) R.drawable.ic_map else R.drawable.ic_list),
+                        contentDescription = null,
+                    )
+                },
+                onClick = onToggleList,
+            )
+        },
+        floatingActionButtonPosition = FabPosition.Center,
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            FilterBar(state.filter, onFilterChange)
-            if (state.isRefreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (state.hasError) ErrorBanner(onRetry)
-
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                // The map stays composed under the list, so it keeps its camera and lifecycle.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            if (mapOpened || !state.showList) {
                 PlaceMap(
                     items = state.items,
                     center = state.center,
+                    focus = state.focus,
                     styleUrl = BuildConfig.MAP_STYLE_URL,
                     onPlaceClick = onSelect,
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (state.showList) {
-                    PlaceList(
-                        items = state.items,
-                        attribution = state.attribution,
-                        onPlaceClick = { id ->
-                            onSelect(id)
-                            onToggleList()
-                        },
-                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-                    )
-                } else {
-                    state.selected?.let { item ->
-                        PlaceCard(
-                            item = item,
-                            onRoute = { openRoute(context, item.place) },
-                            onClose = { onSelect(null) },
-                            // Leaves room for the floating button below the card.
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = 88.dp),
-                        )
-                    }
-                }
+            }
+            if (state.showList) {
+                PlaceList(
+                    items = state.items,
+                    totalCount = state.totalCount,
+                    isRefreshing = state.isRefreshing,
+                    attribution = state.attribution,
+                    onPlaceClick = onSelect,
+                    onClearFilters = onClearFilters,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                )
             }
         }
+    }
+
+    state.selected?.let { item ->
+        PlaceDetailSheet(
+            item = item,
+            showMapButton = state.showList,
+            onDismiss = { onSelect(null) },
+            onRoute = { openRoute(context, item.place) },
+            onShowOnMap = { onShowOnMap(item.place.id) },
+        )
+    }
+
+    if (showIconSheet) {
+        AppIconSheet(
+            selected = appIcon,
+            onSelect = onAppIconChange,
+            onDismiss = { showIconSheet = false },
+        )
     }
 }
 
@@ -113,18 +203,18 @@ private fun FilterBar(filter: PlaceFilter, onChange: (PlaceFilter) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Chip(R.string.filter_open_now, filter.openNow) { onChange(filter.copy(openNow = !filter.openNow)) }
         Chip(R.string.filter_wifi, filter.wifi) { onChange(filter.copy(wifi = !filter.wifi)) }
         Chip(R.string.filter_power, filter.power) { onChange(filter.copy(power = !filter.power)) }
-        Chip(R.string.filter_open_now, filter.openNow) { onChange(filter.copy(openNow = !filter.openNow)) }
-        Chip(R.string.filter_quiet, filter.quiet) { onChange(filter.copy(quiet = !filter.quiet)) }
         Chip(R.string.filter_laptop, filter.laptopAllowed) {
             onChange(filter.copy(laptopAllowed = !filter.laptopAllowed))
         }
+        Chip(R.string.filter_quiet, filter.quiet) { onChange(filter.copy(quiet = !filter.quiet)) }
         Category.entries.forEach { category ->
-            Chip(category.labelRes, category in filter.categories) {
+            Chip(category.filterLabelRes, category in filter.categories) {
                 val categories = if (category in filter.categories) {
                     filter.categories - category
                 } else {
@@ -158,13 +248,6 @@ private fun ErrorBanner(onRetry: () -> Unit) {
         TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
     }
 }
-
-private val Category.labelRes: Int
-    get() = when (this) {
-        Category.CAFE -> R.string.category_cafe
-        Category.LIBRARY -> R.string.category_library
-        Category.COWORKING -> R.string.category_coworking
-    }
 
 private fun openRoute(context: Context, place: Place) {
     val intent = Intent(Intent.ACTION_VIEW, RouteLinks.googleMaps(place.location).toUri())

@@ -7,6 +7,9 @@ import io.ktor.client.engine.okhttp.OkHttp
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
 import nl.beandesk.app.data.remote.CityExportClient
+import nl.beandesk.app.data.remote.CityExportSource
+import nl.beandesk.app.data.remote.SampleCityExportSource
+import nl.beandesk.app.icon.AppIconManager
 
 /** Manual dependency injection; small enough that a DI framework is not worth it yet. */
 class AppContainer(context: Context) {
@@ -15,12 +18,18 @@ class AppContainer(context: Context) {
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
 
-    private val httpClient = HttpClient(OkHttp) {
-        expectSuccess = true
-    }
+    // USE_SAMPLE_DATA is always false in release builds (see app/build.gradle.kts).
+    private val exportSource: CityExportSource =
+        if (BuildConfig.USE_SAMPLE_DATA) {
+            SampleCityExportSource(context.assets)
+        } else {
+            CityExportClient(HttpClient(OkHttp) { expectSuccess = true }, BuildConfig.CITY_EXPORT_BASE_URL)
+        }
 
     val placeRepository = PlaceRepository(
         dao = database.placeDao(),
-        client = CityExportClient(httpClient, BuildConfig.CITY_EXPORT_BASE_URL),
+        source = exportSource,
     )
+
+    val appIconManager = AppIconManager(context)
 }

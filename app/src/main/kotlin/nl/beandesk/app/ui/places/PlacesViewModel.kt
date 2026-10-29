@@ -31,14 +31,21 @@ import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.Place
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.Locale
 
 data class PlaceItem(val place: Place, val status: OpenStatus)
 
 data class PlacesUiState(
+    val cityName: String = "",
     val items: List<PlaceItem> = emptyList(),
+    // Visible places before the filters, for "3 van 11".
+    val totalCount: Int = 0,
     val filter: PlaceFilter = PlaceFilter(),
+    // The place whose detail sheet is open.
     val selected: PlaceItem? = null,
-    val showList: Boolean = false,
+    // Where the map should move to: the last place tapped or sent to the map.
+    val focus: LatLng? = null,
+    val showList: Boolean = true,
     val center: LatLng? = null,
     val attribution: String = "",
     val isRefreshing: Boolean = false,
@@ -48,7 +55,9 @@ data class PlacesUiState(
 private data class UiFlags(
     val filter: PlaceFilter = PlaceFilter(),
     val selectedId: Long? = null,
-    val showList: Boolean = false,
+    val focusId: Long? = null,
+    // The list is the start screen; the map is one tap away.
+    val showList: Boolean = true,
     val isRefreshing: Boolean = false,
     val hasError: Boolean = false,
 )
@@ -101,23 +110,36 @@ class PlacesViewModel(
 
     fun setFilter(filter: PlaceFilter) = flags.update { it.copy(filter = filter) }
 
-    fun select(placeId: Long?) = flags.update { it.copy(selectedId = placeId) }
+    fun clearFilters() = flags.update { it.copy(filter = PlaceFilter()) }
+
+    /** Opens the detail sheet of a place, or closes it with null. */
+    fun select(placeId: Long?) = flags.update {
+        it.copy(selectedId = placeId, focusId = placeId ?: it.focusId)
+    }
+
+    /** Switches to the map, centred on the place. */
+    fun showOnMap(placeId: Long) = flags.update {
+        it.copy(showList = false, selectedId = null, focusId = placeId)
+    }
 
     fun toggleList() = flags.update { it.copy(showList = !it.showList) }
 
     private fun buildState(places: List<Place>, info: CityInfo?, flags: UiFlags): PlacesUiState {
         val now = ZonedDateTime.now(ZoneId.of(info?.timezone ?: DEFAULT_TIMEZONE))
         val at = WeekTime(Weekday.entries[now.dayOfWeek.value - 1], now.hour * 60 + now.minute)
-        val items = places
-            .filterNot { it.isReportedClosed }
+        val visible = places.filterNot { it.isReportedClosed }
+        val items = visible
             .map { PlaceItem(it, statusOf(it, at)) }
             .filter { flags.filter.matches(it.place, it.status, at) }
-            // TODO: sort by distance (core.geo.distanceMeters) once the app knows the user's location.
-            .sortedBy { it.place.name.lowercase() }
+            // Open places first. TODO: sort by distance once the app knows the user's location.
+            .sortedWith(compareBy<PlaceItem>({ it.status.sortRank() }, { it.place.name.lowercase() }))
         return PlacesUiState(
+            cityName = city.replaceFirstChar { it.titlecase(Locale.ROOT) },
             items = items,
+            totalCount = visible.size,
             filter = flags.filter,
             selected = items.firstOrNull { it.place.id == flags.selectedId },
+            focus = visible.firstOrNull { it.id == flags.focusId }?.location,
             showList = flags.showList,
             center = info?.center,
             attribution = info?.attribution.orEmpty(),
@@ -130,6 +152,12 @@ class PlacesViewModel(
         val text = place.openingHours ?: return OpenStatus.Unknown
         val hours = if (text in hoursCache) hoursCache[text] else OpeningHours.parse(text).also { hoursCache[text] = it }
         return hours?.status(at) ?: OpenStatus.Unknown
+    }
+
+    private fun OpenStatus.sortRank(): Int = when (this) {
+        is OpenStatus.Open -> 0
+        OpenStatus.Unknown -> 1
+        is OpenStatus.Closed -> 2
     }
 
     companion object {
