@@ -24,12 +24,6 @@ class SupabaseBackend(url: String, anonKey: String) {
         client.from("place_reports").insert(ReportRow.from(report))
     }
 
-    /** What users reported after [since] (ISO timestamp), for all places. */
-    suspend fun communityChangesSince(since: String): List<CommunityRow> =
-        client.from("place_community")
-            .select { filter { gt("updated_at", since) } }
-            .decodeList<CommunityRow>()
-
     /** The first report creates an anonymous account; supabase-kt keeps its session on the phone. */
     private suspend fun signInIfNeeded() {
         client.auth.awaitInitialization()
@@ -59,16 +53,3 @@ private data class ReportRow(
         )
     }
 }
-
-/** A row of place_community, the facts users currently report about a place. */
-@Serializable
-data class CommunityRow(
-    @SerialName("place_id") val placeId: Long,
-    val wifi: String? = null,
-    val power: String? = null,
-    val quiet: Boolean? = null,
-    @SerialName("laptop_policy") val laptopPolicy: String? = null,
-    @SerialName("closed_reports") val closedReports: Int = 0,
-    @SerialName("last_report_at") val lastReportAt: String? = null,
-    @SerialName("updated_at") val updatedAt: String? = null,
-)

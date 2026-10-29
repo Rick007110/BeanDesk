@@ -1,7 +1,5 @@
 package nl.beandesk.app.data
 
-import android.util.Log
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import nl.beandesk.app.data.local.CityEntity
@@ -48,8 +46,8 @@ class PlaceRepository(
         }
 
     /**
-     * Downloads the whole city again (a few hundred KB), then the reports made since the export
-     * was written, so new reports show up within minutes instead of the next day.
+     * Downloads the whole city again (some tens of KB). The export is built live by the
+     * database, so it already includes everyone's latest reports.
      */
     suspend fun refresh(city: String) {
         val export = source.fetch(city)
@@ -64,7 +62,6 @@ class PlaceRepository(
             ),
             places = export.places.map { it.toEntity(export.city) },
         )
-        backend?.let { syncCommunity(it, since = export.generatedAt) }
     }
 
     /**
@@ -77,31 +74,6 @@ class PlaceRepository(
         setCommunity(report.placeId, place.community.withReport(report))
     }
 
-    private suspend fun syncCommunity(backend: SupabaseBackend, since: String) {
-        // A "+" in a URL query reads as a space, so use the "Z" form of UTC.
-        val rows = try {
-            backend.communityChangesSince(since.replace("+00:00", "Z"))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // The export is already in place; recent reports can wait for the next refresh.
-            Log.w(TAG, "Fetching recent reports failed", e)
-            return
-        }
-        rows.forEach { row ->
-            setCommunity(
-                id = row.placeId,
-                facts = CommunityFacts(
-                    wifi = enumOrNull<WifiStatus>(row.wifi),
-                    power = enumOrNull<PowerLevel>(row.power),
-                    quiet = row.quiet,
-                    laptopPolicy = enumOrNull<LaptopPolicy>(row.laptopPolicy),
-                    closedReports = row.closedReports,
-                ),
-            )
-        }
-    }
-
     private suspend fun setCommunity(id: Long, facts: CommunityFacts) = dao.setCommunity(
         id = id,
         wifi = facts.wifi?.name,
@@ -110,14 +82,7 @@ class PlaceRepository(
         laptopPolicy = facts.laptopPolicy?.name,
         closedReports = facts.closedReports,
     )
-
-    private companion object {
-        const val TAG = "PlaceRepository"
-    }
 }
-
-private inline fun <reified T : Enum<T>> enumOrNull(value: String?): T? =
-    value?.let { v -> enumValues<T>().firstOrNull { it.name.equals(v, ignoreCase = true) } }
 
 private fun ExportedPlace.toEntity(city: String): PlaceEntity {
     val community = place.community

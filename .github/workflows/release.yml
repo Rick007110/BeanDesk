@@ -1,7 +1,8 @@
 name: Release
 
-# Every push to main publishes a pre-release with an installable APK under Releases;
-# a tag such as v0.2.0 publishes a normal release. Of the pre-releases, the newest 10 stay.
+# Every push to main publishes a pre-release with an installable APK under Releases.
+# A tag such as v0.2.0 publishes a normal release; a tag with a suffix such as v0.2.0-test.1
+# publishes a pre-release. Of the build-* pre-releases, the newest 10 stay.
 on:
   push:
     branches: [main]
@@ -21,10 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      # Repository variables; when set, builds use Supabase (city export and reports)
-      # instead of the sample data. The anon key is public by design.
-      SUPABASE_URL: ${{ vars.BEANDESK_SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ vars.BEANDESK_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,7 +39,12 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             name="${GITHUB_REF_NAME#v}"
             echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            # v0.2.0 is a release, v0.2.0-test.1 a pre-release.
+            if [[ "$name" == *-* ]]; then
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             name="$base-build.$GITHUB_RUN_NUMBER"
             echo "tag=build-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
@@ -54,11 +56,7 @@ jobs:
         env:
           VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
-          args=(-Pbeandesk.versionCode="$GITHUB_RUN_NUMBER" -Pbeandesk.versionName="$VERSION_NAME")
-          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
-            args+=(-Pbeandesk.supabaseUrl="$SUPABASE_URL" -Pbeandesk.supabaseAnonKey="$SUPABASE_ANON_KEY" -Pbeandesk.useSampleData=false)
-          fi
-          ./gradlew :app:assembleDebug "${args[@]}"
+          ./gradlew :app:assembleDebug -Pbeandesk.versionCode="$GITHUB_RUN_NUMBER" -Pbeandesk.versionName="$VERSION_NAME"
           cp app/build/outputs/apk/debug/app-debug.apk "BeanDesk-$VERSION_NAME.apk"
 
       - name: Release maken
@@ -71,10 +69,10 @@ jobs:
           {
             echo "Testbuild van \`${GITHUB_SHA::7}\`, versie $VERSION_NAME. Download de APK hieronder en open hem op je telefoon of sleep hem op een emulator."
             echo
-            if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
-              echo "**Data:** de stad-export en meldingen uit Supabase."
-            else
+            if grep -q '^beandesk.useSampleData=true' gradle.properties; then
               echo "**Data:** de ingebouwde voorbeeldset met verzonnen zaken in Utrecht; meldingen blijven op de telefoon."
+            else
+              echo "**Data:** live uit Supabase, met de meldingen van iedereen."
             fi
             echo
             echo "### Wijzigingen"
@@ -90,7 +88,7 @@ jobs:
             "${flags[@]}"
 
       - name: Oude pre-releases opruimen
-        if: steps.version.outputs.prerelease == 'true'
+        if: startsWith(steps.version.outputs.tag, 'build-')
         run: |
           gh release list --limit 200 --json tagName,isPrerelease,createdAt \
             --jq '[.[] | select(.isPrerelease and (.tagName | startswith("build-")))] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |

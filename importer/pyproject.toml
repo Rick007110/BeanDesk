@@ -1,11 +1,10 @@
 [project]
 name = "beandesk-import"
-version = "0.1.0"
-description = "Imports cafés, libraries and coworking spaces from OpenStreetMap into the BeanDesk database"
+version = "0.2.0"
+description = "Command line access to the BeanDesk import and city export database functions"
 requires-python = ">=3.11"
 dependencies = [
     "psycopg[binary]>=3.2",
-    "requests>=2.32",
 ]
 
 [project.optional-dependencies]

@@ -1,1 +1,4 @@
-"""Imports places from OpenStreetMap into the BeanDesk database and writes the city export."""
+"""Command line access to the BeanDesk import and city export.
+
+All rules live in database functions (supabase/migrations); this package only calls them.
+"""

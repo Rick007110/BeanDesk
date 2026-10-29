@@ -1,5 +1,5 @@
--- Minimal stand-ins for what Supabase provides (auth, storage, roles), so the migrations
--- can run against a plain PostGIS database in tests.
+-- Minimal stand-ins for what Supabase provides (auth, roles), so the migrations can run
+-- against a plain PostGIS database in tests.
 
 do $$
 begin
@@ -38,12 +38,4 @@ $$;
 grant usage on schema auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
 
-create schema storage;
-
-create table storage.buckets (
-    id text primary key,
-    name text not null,
-    public boolean not null default false
-);
-
-grant usage on schema public to anon, authenticated;
+grant usage on schema public to anon, authenticated, service_role;

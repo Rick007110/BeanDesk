@@ -27,7 +27,8 @@ class AppContainer(context: Context) {
         } else {
             CityExportClient(
                 http = HttpClient(OkHttp) { expectSuccess = true },
-                baseUrl = "${BuildConfig.SUPABASE_URL}/storage/v1/object/public/city-exports",
+                supabaseUrl = BuildConfig.SUPABASE_URL,
+                anonKey = BuildConfig.SUPABASE_ANON_KEY,
             )
         }
 
