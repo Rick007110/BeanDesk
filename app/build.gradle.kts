@@ -18,12 +18,24 @@ android {
         applicationId = "nl.beandesk.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // The release workflow passes the run number, so every build installs as an update.
+        versionCode = providers.gradleProperty("beandesk.versionCode").orNull?.toInt() ?: 1
+        versionName = beanDeskProperty("versionName")
 
         buildConfigField("String", "CITY_EXPORT_BASE_URL", "\"${beanDeskProperty("cityExportBaseUrl")}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${beanDeskProperty("mapStyleUrl")}\"")
         buildConfigField("String", "DEFAULT_CITY", "\"${beanDeskProperty("defaultCity")}\"")
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            // A shared debug key (not a secret, like Android's own), so builds from GitHub Releases
+            // and Android Studio install over each other instead of needing an uninstall first.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {

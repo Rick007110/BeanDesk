@@ -14,7 +14,7 @@ Het import-script haalt de zaken van een stad uit OpenStreetMap en zet ze in Sup
 | `core/` | Logica zonder Android: openingstijden, filters, afstand, routelink en het inlezen van de stad-export. Kan later naar Kotlin Multiplatform als er een iOS-app komt. |
 | `supabase/` | Databaseschema, RLS-regels, triggers en de lokale Supabase-config |
 | `importer/` | Python-script voor de OSM-import en de stad-export |
-| `.github/workflows/` | CI en het schema dat de stad-data ververst |
+| `.github/workflows/` | CI, de releases met APK en het schema dat de stad-data ververst |
 | `docs/brand/` | Logo, kleuren en het script dat alle logobestanden maakt |
 
 ## Aan de slag
@@ -31,13 +31,19 @@ Nodig: een recente Android Studio en JDK 21.
    beandesk.useSampleData=false
    ```
 
-Elke CI-run bewaart ook de debug-APK als artifact (`beandesk-debug-apk`), die je zo op een emulator kunt slepen.
-
 De logica in `core` test je zo:
 
 ```bash
 ./gradlew :core:test
 ```
+
+### Releases
+
+Elke push naar `main` zet een pre-release met een installeerbare APK onder [Releases](https://github.com/Rick007110/BeanDesk/releases); de nieuwste tien blijven staan. Een tag zoals `v0.2.0` levert een gewone release op. Open de APK op je telefoon of sleep hem op een emulator. Elke build heeft een hoger versienummer en dezelfde debug-sleutel (`app/debug.keystore`, niet geheim). Daardoor installeer je hem over de vorige heen, ook over een build uit Android Studio.
+
+Zolang de repository-variabele `BEANDESK_CITY_EXPORT_BASE_URL` leeg is, bevatten de builds de voorbeelddata. Zet je hem op de URL van je stad-export, dan gebruiken ze die.
+
+Voor de Play Store komt er later een release-build met een eigen uploadsleutel; de debug-sleutel is daar niet voor bedoeld.
 
 ### Supabase
 

@@ -1,0 +1,97 @@
+name: Release
+
+# Every push to main publishes a pre-release with an installable APK under Releases;
+# a tag such as v0.2.0 publishes a normal release. Of the pre-releases, the newest 10 stay.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: APK publiceren
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Repository variable; when set, builds use the real city export instead of the sample.
+      EXPORT_URL: ${{ vars.BEANDESK_CITY_EXPORT_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # for the change list since the previous build
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Versie bepalen
+        id: version
+        run: |
+          base=$(grep '^beandesk.versionName=' gradle.properties | cut -d= -f2)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            name="${GITHUB_REF_NAME#v}"
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            name="$base-build.$GITHUB_RUN_NUMBER"
+            echo "tag=build-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: APK bouwen
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          args=(-Pbeandesk.versionCode="$GITHUB_RUN_NUMBER" -Pbeandesk.versionName="$VERSION_NAME")
+          if [ -n "$EXPORT_URL" ]; then
+            args+=(-Pbeandesk.cityExportBaseUrl="$EXPORT_URL" -Pbeandesk.useSampleData=false)
+          fi
+          ./gradlew :app:assembleDebug "${args[@]}"
+          cp app/build/outputs/apk/debug/app-debug.apk "BeanDesk-$VERSION_NAME.apk"
+
+      - name: Release maken
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          previous=$(git tag --list 'build-*' --sort=-v:refname | grep -vx "$TAG" | head -n 1 || true)
+          {
+            echo "Testbuild van \`${GITHUB_SHA::7}\`, versie $VERSION_NAME. Download de APK hieronder en open hem op je telefoon of sleep hem op een emulator."
+            echo
+            if [ -n "$EXPORT_URL" ]; then
+              echo "**Data:** de stad-export uit Supabase."
+            else
+              echo "**Data:** de ingebouwde voorbeeldset met verzonnen zaken in Utrecht."
+            fi
+            echo
+            echo "### Wijzigingen"
+            git log --no-merges -n 30 --pretty='- %s' ${previous:+"$previous..HEAD"}
+          } > notes.md
+
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "BeanDesk-$VERSION_NAME.apk" \
+            --target "$GITHUB_SHA" \
+            --title "BeanDesk $VERSION_NAME" \
+            --notes-file notes.md \
+            "${flags[@]}"
+
+      - name: Oude pre-releases opruimen
+        if: steps.version.outputs.prerelease == 'true'
+        run: |
+          gh release list --limit 200 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease and (.tagName | startswith("build-")))] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |
+            while read -r tag; do
+              gh release delete "$tag" --yes --cleanup-tag
+            done

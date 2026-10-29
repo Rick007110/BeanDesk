@@ -9,6 +9,8 @@ captures/
 *.aab
 *.keystore
 *.jks
+# The shared debug key is meant to be in the repo (see app/build.gradle.kts).
+!app/debug.keystore
 
 # IDE
 .idea/

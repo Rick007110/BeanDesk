@@ -21,12 +21,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
       - name: Tests en debug-build
         run: ./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug --stacktrace
-      - name: Debug-APK bewaren
-        uses: actions/upload-artifact@v6
-        with:
-          name: beandesk-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
 
   importer:
     name: Import-script en database
