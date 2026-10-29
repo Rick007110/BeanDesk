@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BeanDesk</string>
+
+    <string name="show_list">Lijst</string>
+    <string name="show_map">Kaart</string>
+
+    <string name="filter_wifi">Wifi</string>
+    <string name="filter_power">Stopcontacten</string>
+    <string name="filter_open_now">Nu open</string>
+    <string name="filter_quiet">Rustig</string>
+    <string name="filter_laptop">Laptop ok</string>
+
+    <string name="category_cafe">Cafés</string>
+    <string name="category_library">Bibliotheken</string>
+    <string name="category_coworking">Coworking</string>
+
+    <string name="status_open_closes_in">Nu open · sluit over %1$s</string>
+    <string name="status_always_open">Altijd open</string>
+    <string name="status_closed_opens_in">Gesloten · opent over %1$s</string>
+    <string name="status_closed">Gesloten</string>
+    <string name="status_unknown">Openingstijden onbekend</string>
+
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours">%1$d u</string>
+    <string name="duration_hours_minutes">%1$d u %2$d min</string>
+    <string name="duration_more_than_a_day">ruim een dag</string>
+
+    <string name="place_facts">Wifi: %1$s · Stopcontacten: %2$s</string>
+    <string name="yes">ja</string>
+    <string name="no">nee</string>
+    <string name="unknown">onbekend</string>
+
+    <string name="route">Route</string>
+    <string name="route_unavailable">Geen app gevonden om de route te openen</string>
+    <string name="close">Sluiten</string>
+    <string name="no_places">Geen zaken gevonden met deze filters.</string>
+    <string name="refresh_failed">Zaken bijwerken is mislukt.</string>
+    <string name="retry">Opnieuw</string>
+</resources>

@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "city": "utrecht",
+  "timezone": "Europe/Amsterdam",
+  "generated_at": "2026-10-29T03:17:00+00:00",
+  "attribution": "© OpenStreetMap-bijdragers",
+  "center": {"lat": 52.0907, "lng": 5.1214},
+  "places": [
+    {
+      "id": 1,
+      "osm_type": "node",
+      "osm_id": 1001,
+      "category": "cafe",
+      "name": "Koffie & Werk",
+      "address": "Oudegracht 1",
+      "lat": 52.0911,
+      "lng": 5.1201,
+      "opening_hours": "Mo-Fr 08:00-18:00; Sa 09:00-17:00",
+      "osm": {"wifi": true, "wifi_free": true, "power": null},
+      "community": {
+        "wifi": "fast",
+        "power": "many",
+        "quiet": true,
+        "laptop_policy": "not_on_weekends",
+        "closed_reports": 0,
+        "last_report_at": "2026-10-28T10:12:00+00:00"
+      },
+      "updated_at": "2026-10-28T10:12:00+00:00"
+    },
+    {
+      "id": 2,
+      "osm_type": "way",
+      "osm_id": 2002,
+      "category": "library",
+      "name": "Bibliotheek Neude",
+      "address": null,
+      "lat": 52.0927,
+      "lng": 5.1196,
+      "opening_hours": null,
+      "osm": {"wifi": null, "wifi_free": null, "power": null},
+      "community": null,
+      "updated_at": "2026-10-27T03:17:00+00:00"
+    },
+    {
+      "id": 3,
+      "osm_type": "node",
+      "osm_id": 3003,
+      "category": "rooftop_bar",
+      "name": "Onbekende categorie uit een nieuwere export",
+      "address": null,
+      "lat": 52.09,
+      "lng": 5.12,
+      "opening_hours": null,
+      "osm": {"wifi": null, "wifi_free": null, "power": null},
+      "community": null,
+      "updated_at": "2026-10-27T03:17:00+00:00"
+    }
+  ]
+}

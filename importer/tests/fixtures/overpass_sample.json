@@ -1,0 +1,81 @@
+{
+  "version": 0.6,
+  "generator": "Hand-written sample in the shape of an Overpass API response",
+  "elements": [
+    {
+      "type": "node",
+      "id": 1001,
+      "lat": 52.0911,
+      "lon": 5.1201,
+      "tags": {
+        "amenity": "cafe",
+        "name": "Koffie & Werk",
+        "addr:street": "Oudegracht",
+        "addr:housenumber": "1",
+        "opening_hours": "Mo-Fr 08:00-18:00; Sa 09:00-17:00",
+        "internet_access": "wlan",
+        "internet_access:fee": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 2002,
+      "center": {"lat": 52.0927, "lon": 5.1196},
+      "tags": {
+        "amenity": "library",
+        "name": "Bibliotheek Neude",
+        "addr:street": "Neude"
+      }
+    },
+    {
+      "type": "node",
+      "id": 3003,
+      "lat": 52.0855,
+      "lon": 5.1302,
+      "tags": {
+        "amenity": "coworking_space",
+        "name": "Werkplaats",
+        "power_supply": "yes",
+        "internet_access": "yes"
+      }
+    },
+    {
+      "type": "relation",
+      "id": 8008,
+      "center": {"lat": 52.0894, "lon": 5.1101},
+      "tags": {
+        "amenity": "cafe",
+        "name": "Stationscafé",
+        "internet_access": "terminal"
+      }
+    },
+    {
+      "type": "node",
+      "id": 4004,
+      "lat": 52.0901,
+      "lon": 5.1188,
+      "tags": {"amenity": "cafe", "name": "Coffeeshop Groen", "cannabis": "yes"}
+    },
+    {
+      "type": "node",
+      "id": 5005,
+      "lat": 52.0902,
+      "lon": 5.1189,
+      "tags": {"amenity": "cafe"}
+    },
+    {
+      "type": "node",
+      "id": 6006,
+      "lat": 52.0903,
+      "lon": 5.1190,
+      "tags": {"amenity": "cafe", "name": "Personeelskantine", "access": "private"}
+    },
+    {
+      "type": "node",
+      "id": 7007,
+      "lat": 52.0904,
+      "lon": 5.1191,
+      "tags": {"amenity": "cafe", "name": "Café De Gesloten Deur", "opening_hours": "closed"}
+    }
+  ]
+}
