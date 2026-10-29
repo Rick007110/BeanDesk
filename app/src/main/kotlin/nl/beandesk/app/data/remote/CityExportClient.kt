@@ -10,8 +10,8 @@ import nl.beandesk.core.export.CityExportParser
 class CityExportClient(
     private val http: HttpClient,
     private val baseUrl: String,
-) {
-    suspend fun fetch(city: String): CityExport {
+) : CityExportSource {
+    override suspend fun fetch(city: String): CityExport {
         val body = http.get("${baseUrl.trimEnd('/')}/$city.json").bodyAsText()
         return CityExportParser.parse(body)
     }

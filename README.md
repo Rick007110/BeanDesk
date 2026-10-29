@@ -20,12 +20,15 @@ Het import-script haalt de zaken van een stad uit OpenStreetMap en zet ze in Sup
 
 Nodig: een recente Android Studio en JDK 21.
 
-1. Open de map in Android Studio.
-2. Zet de URL van je eigen stad-export in `~/.gradle/gradle.properties`, zodat die niet in de repo komt:
+1. Open de map in Android Studio en start de app op een emulator of telefoon.
+2. Een debug-build toont standaard twaalf verzonnen voorbeeldzaken in Utrecht (`app/src/debug/assets/sample/utrecht.json`). Daarmee probeer je de kaart, de lijst, de filters en de routeknop zonder Supabase.
+3. Staat je eigen stad-export klaar, zet dan in `~/.gradle/gradle.properties` de URL en zet de voorbeelddata uit. Zo komen ze niet in de repo:
    ```properties
    beandesk.cityExportBaseUrl=https://<project-ref>.supabase.co/storage/v1/object/public/city-exports
+   beandesk.useSampleData=false
    ```
-3. Start de app. Zolang er geen export is, toont hij de kaart met een melding en de knop "Opnieuw".
+
+Elke CI-run bewaart ook de debug-APK als artifact (`beandesk-debug-apk`), die je zo op een emulator kunt slepen.
 
 De logica in `core` test je zo:
 

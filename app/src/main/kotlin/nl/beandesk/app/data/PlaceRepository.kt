@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.map
 import nl.beandesk.app.data.local.CityEntity
 import nl.beandesk.app.data.local.PlaceDao
 import nl.beandesk.app.data.local.PlaceEntity
-import nl.beandesk.app.data.remote.CityExportClient
+import nl.beandesk.app.data.remote.CityExportSource
 import nl.beandesk.core.export.ExportedPlace
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.CommunityFacts
@@ -24,7 +24,7 @@ data class CityInfo(val timezone: String, val attribution: String, val center: L
  */
 class PlaceRepository(
     private val dao: PlaceDao,
-    private val client: CityExportClient,
+    private val source: CityExportSource,
 ) {
     fun places(city: String): Flow<List<Place>> =
         dao.observePlaces(city).map { rows -> rows.mapNotNull { it.toPlace() } }
@@ -42,7 +42,7 @@ class PlaceRepository(
      * skeleton; the MVP adds delta sync on `updated_at` (see README).
      */
     suspend fun refresh(city: String) {
-        val export = client.fetch(city)
+        val export = source.fetch(city)
         dao.replaceCity(
             city = CityEntity(
                 city = export.city,
