@@ -6,9 +6,11 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
+import nl.beandesk.app.data.location.LocationRepository
 import nl.beandesk.app.data.remote.CityExportClient
 import nl.beandesk.app.data.remote.CityExportSource
 import nl.beandesk.app.data.remote.SampleCityExportSource
+import nl.beandesk.app.data.remote.SupabaseBackend
 import nl.beandesk.app.icon.AppIconManager
 
 /** Manual dependency injection; small enough that a DI framework is not worth it yet. */
@@ -23,13 +25,28 @@ class AppContainer(context: Context) {
         if (BuildConfig.USE_SAMPLE_DATA) {
             SampleCityExportSource(context.assets)
         } else {
-            CityExportClient(HttpClient(OkHttp) { expectSuccess = true }, BuildConfig.CITY_EXPORT_BASE_URL)
+            CityExportClient(
+                http = HttpClient(OkHttp) { expectSuccess = true },
+                supabaseUrl = BuildConfig.SUPABASE_URL,
+                anonKey = BuildConfig.SUPABASE_ANON_KEY,
+            )
+        }
+
+    // Sample places do not exist in the database, so reports about them stay on the phone.
+    private val backend: SupabaseBackend? =
+        if (!BuildConfig.USE_SAMPLE_DATA && BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()) {
+            SupabaseBackend(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+        } else {
+            null
         }
 
     val placeRepository = PlaceRepository(
         dao = database.placeDao(),
         source = exportSource,
+        backend = backend,
     )
+
+    val locationRepository = LocationRepository(context)
 
     val appIconManager = AppIconManager(context)
 }

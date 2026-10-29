@@ -200,8 +200,3 @@ $$;
 create trigger place_reports_to_community
     after insert on public.place_reports
     for each row execute function public.apply_report_to_community();
-
--- The import script uploads one JSON file per city here; the app downloads it.
-insert into storage.buckets (id, name, public)
-values ('city-exports', 'city-exports', true)
-on conflict (id) do nothing;

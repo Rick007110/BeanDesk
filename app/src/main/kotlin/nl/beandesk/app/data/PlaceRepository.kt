@@ -6,6 +6,7 @@ import nl.beandesk.app.data.local.CityEntity
 import nl.beandesk.app.data.local.PlaceDao
 import nl.beandesk.app.data.local.PlaceEntity
 import nl.beandesk.app.data.remote.CityExportSource
+import nl.beandesk.app.data.remote.SupabaseBackend
 import nl.beandesk.core.export.ExportedPlace
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.CommunityFacts
@@ -14,18 +15,25 @@ import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.OsmFacts
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.PowerLevel
+import nl.beandesk.core.model.Report
 import nl.beandesk.core.model.WifiStatus
+import nl.beandesk.core.model.withReport
 
 data class CityInfo(val timezone: String, val attribution: String, val center: LatLng?)
 
 /**
  * Places live in the local database; the network only refreshes it.
  * Searching and filtering never leave the phone, so the user's location never does either.
+ *
+ * [backend] is null without a Supabase project (sample data): reports then stay on the phone.
  */
 class PlaceRepository(
     private val dao: PlaceDao,
     private val source: CityExportSource,
+    private val backend: SupabaseBackend?,
 ) {
+    val sendsReports: Boolean get() = backend != null
+
     fun places(city: String): Flow<List<Place>> =
         dao.observePlaces(city).map { rows -> rows.mapNotNull { it.toPlace() } }
 
@@ -38,8 +46,8 @@ class PlaceRepository(
         }
 
     /**
-     * Downloads the whole city again. The export is a few hundred KB, so this is fine for the
-     * skeleton; the MVP adds delta sync on `updated_at` (see README).
+     * Downloads the whole city again (some tens of KB). The export is built live by the
+     * database, so it already includes everyone's latest reports.
      */
     suspend fun refresh(city: String) {
         val export = source.fetch(city)
@@ -55,6 +63,25 @@ class PlaceRepository(
             places = export.places.map { it.toEntity(export.city) },
         )
     }
+
+    /**
+     * Sends the report (when there is a backend) and applies it on the phone straight away,
+     * the way the database trigger does, so the user sees the effect at once.
+     */
+    suspend fun report(report: Report) {
+        backend?.sendReport(report)
+        val place = dao.place(report.placeId)?.toPlace() ?: return
+        setCommunity(report.placeId, place.community.withReport(report))
+    }
+
+    private suspend fun setCommunity(id: Long, facts: CommunityFacts) = dao.setCommunity(
+        id = id,
+        wifi = facts.wifi?.name,
+        power = facts.power?.name,
+        quiet = facts.quiet,
+        laptopPolicy = facts.laptopPolicy?.name,
+        closedReports = facts.closedReports,
+    )
 }
 
 private fun ExportedPlace.toEntity(city: String): PlaceEntity {

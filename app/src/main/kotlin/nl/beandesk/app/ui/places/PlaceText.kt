@@ -11,6 +11,8 @@ import nl.beandesk.core.model.LaptopPolicy
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.PowerLevel
 import nl.beandesk.core.model.WifiStatus
+import java.util.Locale
+import kotlin.math.roundToInt
 
 // Shared wording and colours for places, used by the list, the detail sheet and the map.
 
@@ -37,6 +39,22 @@ val Category.filterLabelRes: Int
         Category.LIBRARY -> R.string.category_library
         Category.COWORKING -> R.string.category_coworking
     }
+
+private val DUTCH = Locale.forLanguageTag("nl-NL")
+
+/** "350 m" or "1,2 km", with a Dutch decimal comma. */
+fun distanceText(meters: Double): String {
+    val roundedMeters = (meters / 10).roundToInt() * 10
+    return if (roundedMeters < 1000) "$roundedMeters m" else String.format(DUTCH, "%.1f km", meters / 1000)
+}
+
+/** "Café · 350 m · Oudegracht 120"; parts that are unknown are left out. */
+@Composable
+fun placeSubtitle(item: PlaceItem): String = listOfNotNull(
+    stringResource(item.place.category.labelRes),
+    item.distanceMeters?.let(::distanceText),
+    item.place.address,
+).joinToString(" · ")
 
 @Composable
 fun statusColor(status: OpenStatus): Color {

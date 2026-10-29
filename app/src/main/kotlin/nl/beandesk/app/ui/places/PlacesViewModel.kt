@@ -8,13 +8,19 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -22,18 +28,21 @@ import nl.beandesk.app.BeanDeskApplication
 import nl.beandesk.app.BuildConfig
 import nl.beandesk.app.data.CityInfo
 import nl.beandesk.app.data.PlaceRepository
+import nl.beandesk.app.data.location.LocationRepository
 import nl.beandesk.core.filter.PlaceFilter
+import nl.beandesk.core.geo.distanceMeters
 import nl.beandesk.core.hours.OpenStatus
 import nl.beandesk.core.hours.OpeningHours
 import nl.beandesk.core.hours.WeekTime
 import nl.beandesk.core.hours.Weekday
 import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.Place
+import nl.beandesk.core.model.Report
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Locale
 
-data class PlaceItem(val place: Place, val status: OpenStatus)
+data class PlaceItem(val place: Place, val status: OpenStatus, val distanceMeters: Double? = null)
 
 data class PlacesUiState(
     val cityName: String = "",
@@ -45,12 +54,19 @@ data class PlacesUiState(
     val selected: PlaceItem? = null,
     // Where the map should move to: the last place tapped or sent to the map.
     val focus: LatLng? = null,
+    val userLocation: LatLng? = null,
     val showList: Boolean = true,
     val center: LatLng? = null,
     val attribution: String = "",
     val isRefreshing: Boolean = false,
     val hasError: Boolean = false,
+    val isSendingReport: Boolean = false,
+    // False with sample data: reports then stay on the phone.
+    val sendsReports: Boolean = false,
 )
+
+/** One-off messages for the snackbar. */
+enum class PlacesMessage { REPORT_SENT, REPORT_SAVED_LOCALLY, REPORT_RATE_LIMITED, REPORT_FAILED }
 
 private data class UiFlags(
     val filter: PlaceFilter = PlaceFilter(),
@@ -60,13 +76,19 @@ private data class UiFlags(
     val showList: Boolean = true,
     val isRefreshing: Boolean = false,
     val hasError: Boolean = false,
+    val isSendingReport: Boolean = false,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlacesViewModel(
     private val repository: PlaceRepository,
+    private val locationRepository: LocationRepository,
     private val city: String,
 ) : ViewModel() {
     private val flags = MutableStateFlow(UiFlags())
+    private val locationGranted = MutableStateFlow(false)
+    private val messageChannel = Channel<PlacesMessage>(Channel.BUFFERED)
+    val messages: Flow<PlacesMessage> = messageChannel.receiveAsFlow()
 
     // Parsed opening hours per distinct opening_hours text; many places share the same value.
     // Only touched from the combine below, which runs sequentially.
@@ -80,9 +102,20 @@ class PlacesViewModel(
         }
     }
 
+    // Location updates run only while the screen collects the state and permission is granted.
+    private val userLocation: Flow<LatLng?> = locationGranted.flatMapLatest { granted ->
+        if (granted) locationRepository.updates() else flowOf(null)
+    }
+
     val state: StateFlow<PlacesUiState> =
-        combine(repository.places(city), repository.cityInfo(city), flags, minuteTicks) { places, info, uiFlags, _ ->
-            buildState(places, info, uiFlags)
+        combine(
+            repository.places(city),
+            repository.cityInfo(city),
+            flags,
+            userLocation,
+            minuteTicks,
+        ) { places, info, uiFlags, location, _ ->
+            buildState(places, info, uiFlags, location)
         }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlacesUiState())
@@ -108,6 +141,10 @@ class PlacesViewModel(
         }
     }
 
+    fun setLocationGranted(granted: Boolean) {
+        locationGranted.value = granted
+    }
+
     fun setFilter(filter: PlaceFilter) = flags.update { it.copy(filter = filter) }
 
     fun clearFilters() = flags.update { it.copy(filter = PlaceFilter()) }
@@ -124,15 +161,42 @@ class PlacesViewModel(
 
     fun toggleList() = flags.update { it.copy(showList = !it.showList) }
 
-    private fun buildState(places: List<Place>, info: CityInfo?, flags: UiFlags): PlacesUiState {
+    /** Calls [onDone] with true when the report was sent or saved, so the form can close. */
+    fun report(report: Report, onDone: (Boolean) -> Unit) {
+        if (report.isEmpty || flags.value.isSendingReport) return
+        viewModelScope.launch {
+            flags.update { it.copy(isSendingReport = true) }
+            val message = try {
+                repository.report(report)
+                if (repository.sendsReports) PlacesMessage.REPORT_SENT else PlacesMessage.REPORT_SAVED_LOCALLY
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Sending report failed", e)
+                // The database trigger raises "rate_limit: ..." past the daily limit.
+                if (e.message?.contains("rate_limit") == true) PlacesMessage.REPORT_RATE_LIMITED else PlacesMessage.REPORT_FAILED
+            }
+            flags.update { it.copy(isSendingReport = false) }
+            messageChannel.send(message)
+            onDone(message == PlacesMessage.REPORT_SENT || message == PlacesMessage.REPORT_SAVED_LOCALLY)
+        }
+    }
+
+    private fun buildState(places: List<Place>, info: CityInfo?, flags: UiFlags, location: LatLng?): PlacesUiState {
         val now = ZonedDateTime.now(ZoneId.of(info?.timezone ?: DEFAULT_TIMEZONE))
         val at = WeekTime(Weekday.entries[now.dayOfWeek.value - 1], now.hour * 60 + now.minute)
         val visible = places.filterNot { it.isReportedClosed }
         val items = visible
-            .map { PlaceItem(it, statusOf(it, at)) }
+            .map { PlaceItem(it, statusOf(it, at), location?.let { here -> distanceMeters(here, it.location) }) }
             .filter { flags.filter.matches(it.place, it.status, at) }
-            // Open places first. TODO: sort by distance once the app knows the user's location.
-            .sortedWith(compareBy<PlaceItem>({ it.status.sortRank() }, { it.place.name.lowercase() }))
+            // Open places first, then the nearest (or by name while the location is unknown).
+            .sortedWith(
+                compareBy<PlaceItem>(
+                    { it.status.sortRank() },
+                    { it.distanceMeters ?: Double.MAX_VALUE },
+                    { it.place.name.lowercase() },
+                ),
+            )
         return PlacesUiState(
             cityName = city.replaceFirstChar { it.titlecase(Locale.ROOT) },
             items = items,
@@ -140,11 +204,14 @@ class PlacesViewModel(
             filter = flags.filter,
             selected = items.firstOrNull { it.place.id == flags.selectedId },
             focus = visible.firstOrNull { it.id == flags.focusId }?.location,
+            userLocation = location,
             showList = flags.showList,
             center = info?.center,
             attribution = info?.attribution.orEmpty(),
             isRefreshing = flags.isRefreshing,
             hasError = flags.hasError,
+            isSendingReport = flags.isSendingReport,
+            sendsReports = repository.sendsReports,
         )
     }
 
@@ -167,7 +234,11 @@ class PlacesViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as BeanDeskApplication
-                PlacesViewModel(app.container.placeRepository, BuildConfig.DEFAULT_CITY)
+                PlacesViewModel(
+                    repository = app.container.placeRepository,
+                    locationRepository = app.container.locationRepository,
+                    city = BuildConfig.DEFAULT_CITY,
+                )
             }
         }
     }

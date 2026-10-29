@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
@@ -18,12 +19,26 @@ android {
         applicationId = "nl.beandesk.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // The release workflow passes the run number, so every build installs as an update.
+        versionCode = providers.gradleProperty("beandesk.versionCode").orNull?.toInt() ?: 1
+        versionName = beanDeskProperty("versionName")
 
-        buildConfigField("String", "CITY_EXPORT_BASE_URL", "\"${beanDeskProperty("cityExportBaseUrl")}\"")
+        // Empty until there is a Supabase project; the anon key is public by design.
+        buildConfigField("String", "SUPABASE_URL", "\"${beanDeskProperty("supabaseUrl").trimEnd('/')}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${beanDeskProperty("supabaseAnonKey")}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${beanDeskProperty("mapStyleUrl")}\"")
         buildConfigField("String", "DEFAULT_CITY", "\"${beanDeskProperty("defaultCity")}\"")
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            // A shared debug key (not a secret, like Android's own), so builds from GitHub Releases
+            // and Android Studio install over each other instead of needing an uninstall first.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
@@ -70,10 +85,16 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
 
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+
     implementation(libs.maplibre.android)
+    implementation(libs.play.services.location)
 
     testImplementation(libs.kotlin.test.junit)
 }

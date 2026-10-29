@@ -51,6 +51,7 @@ fun PlaceList(
     onPlaceClick: (Long) -> Unit,
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
+    header: (@Composable () -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = modifier,
@@ -58,6 +59,9 @@ fun PlaceList(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (header != null) {
+            item { header() }
+        }
         if (items.isEmpty()) {
             if (!isRefreshing) {
                 item { EmptyState(filtered = totalCount > 0, onClearFilters = onClearFilters) }
@@ -113,7 +117,7 @@ private fun PlaceCard(item: PlaceItem, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = listOfNotNull(stringResource(place.category.labelRes), place.address).joinToString(" · "),
+                    text = placeSubtitle(item),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
