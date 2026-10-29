@@ -1,0 +1,75 @@
+name: Stad-data
+
+# Daily: write the city export (so new reports reach the app).
+# Mondays and on request: first re-import the places from OpenStreetMap.
+# Needs the repository secrets SUPABASE_DB_URL, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY;
+# without them the run stops with a notice.
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_import:
+        description: Ook opnieuw importeren uit OpenStreetMap
+        type: boolean
+        default: true
+
+env:
+  # Space-separated slugs from importer/cities.toml.
+  CITIES: utrecht
+
+jobs:
+  city-data:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: importer
+    env:
+      DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Secrets controleren
+        id: secrets
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::notice::Supabase-secrets ontbreken; zie README.md. Niets gedaan."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          python-version: "3.12"
+
+      - if: steps.secrets.outputs.ready == 'true'
+        run: pip install -e .
+
+      - name: Importeren uit OpenStreetMap
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_IMPORT: ${{ inputs.run_import }}
+        run: |
+          if [ "$EVENT" = "schedule" ] && [ "$(date -u +%u)" != "1" ]; then
+            echo "Het importeren draait alleen op maandag."
+            exit 0
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$RUN_IMPORT" != "true" ]; then
+            exit 0
+          fi
+          for city in $CITIES; do
+            python -m beandesk_import import "$city"
+            sleep 30 # Overpass fair use: space out the queries.
+          done
+
+      - name: Export maken en uploaden
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          for city in $CITIES; do
+            python -m beandesk_import export "$city" --upload
+          done
