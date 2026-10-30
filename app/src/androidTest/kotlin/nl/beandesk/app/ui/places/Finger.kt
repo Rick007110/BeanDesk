@@ -79,7 +79,11 @@ class Finger(private val name: String) {
         device.swipe(width / 2, (height * fromY).toInt(), width / 2, (height * toY).toInt(), steps)
     }
 
-    fun fling(fromY: Float, toY: Float) = drag(fromY, toY, steps = 6)
+    /** A flick, then the moment a person takes before tapping: the content has stopped moving. */
+    fun fling(fromY: Float, toY: Float) {
+        drag(fromY, toY, steps = 6)
+        Thread.sleep(1_000)
+    }
 
     fun await(selector: BySelector, timeout: Long = 3_000): UiObject2 =
         find(selector, timeout) ?: fail("Not on screen after $timeout ms: $selector")

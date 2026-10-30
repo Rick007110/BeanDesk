@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import nl.beandesk.app.ui.theme.BeanDeskTheme
 import org.junit.After
 import org.junit.Rule
@@ -87,6 +89,9 @@ class SheetTapsAfterScrollingTest {
         finger.shot("flicked")
         finger.tapUntilSelected(By.text(visible("C")))
         finger.drag(0.45f, 0.55f, steps = 100)
+        finger.tapUntilSelected(By.text(visible("A")))
+        finger.fling(0.35f, 0.6f)
+        finger.tapUntilSelected(By.text(visible("B")))
         finger.fling(0.85f, 0.35f)
         finger.fling(0.85f, 0.35f)
         finger.shot("bottom")
@@ -100,12 +105,22 @@ class SheetTapsAfterScrollingTest {
         finger.tap(By.text("Achter de sheet: 0"), expect = By.text("Achter de sheet: 1"))
     }
 
-    /** The first question row whose chip [option] is fully on screen, like "B4". */
-    private fun visible(option: String): String =
-        (1..QUESTIONS).map { "$option$it" }.firstOrNull { text ->
-            val node = finger.device.findObject(By.text(text))
-            node != null && node.visibleBounds.top > finger.height * 0.15 && node.visibleBounds.bottom < finger.height * 0.9
-        } ?: finger.fail("No $option chip on screen")
+    /** The first question row whose chip [option] is well on screen, like "B4". */
+    private fun visible(option: String): String {
+        repeat(5) {
+            (1..QUESTIONS).map { "$option$it" }.firstOrNull { text -> isWellOnScreen(By.text(text)) }?.let { return it }
+            Thread.sleep(300)
+        }
+        return finger.fail("No $option chip on screen")
+    }
+
+    private fun isWellOnScreen(selector: BySelector): Boolean = try {
+        val bounds = finger.device.findObject(selector)?.visibleBounds
+        bounds != null && bounds.top > finger.height * 0.15 && bounds.bottom < finger.height * 0.9
+    } catch (e: StaleObjectException) {
+        // It moved out of sight while looking.
+        false
+    }
 
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
