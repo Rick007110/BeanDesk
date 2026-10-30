@@ -29,8 +29,7 @@ class Finger(private val name: String) {
     fun tap(selector: BySelector, expect: BySelector) {
         val bounds = reveal(selector).visibleBounds
         device.click(bounds.centerX(), bounds.centerY())
-        device.wait(Until.findObject(expect), 3_000)
-            ?: fail("Tapped $selector at ${bounds.toShortString()}, but $expect did not show")
+        find(expect, 3_000) ?: fail("Tapped $selector at ${bounds.toShortString()}, but $expect did not show")
         shot("tapped")
     }
 
@@ -62,7 +61,7 @@ class Finger(private val name: String) {
     /** Finds [selector]; when it is below the screen edge, scrolls down a little at a time. */
     fun reveal(selector: BySelector): UiObject2 {
         repeat(5) {
-            val node = device.wait(Until.findObject(selector), 1_000)
+            val node = find(selector, 1_000)
             if (node != null && node.visibleBounds.height() > 20) return node
             drag(0.7f, 0.5f)
         }
@@ -83,7 +82,28 @@ class Finger(private val name: String) {
     fun fling(fromY: Float, toY: Float) = drag(fromY, toY, steps = 6)
 
     fun await(selector: BySelector, timeout: Long = 3_000): UiObject2 =
-        device.wait(Until.findObject(selector), timeout) ?: fail("Not on screen after $timeout ms: $selector")
+        find(selector, timeout) ?: fail("Not on screen after $timeout ms: $selector")
+
+    /** Waits up to [timeout] ms for [selector]. */
+    fun find(selector: BySelector, timeout: Long): UiObject2? {
+        val deadline = System.currentTimeMillis() + timeout
+        do {
+            device.findObject(selector)?.let { return it }
+            dismissSystemDialog()
+            Thread.sleep(100)
+        } while (System.currentTimeMillis() < deadline)
+        return null
+    }
+
+    /**
+     * Closes an "isn't responding" dialog about another app, which a busy emulator sometimes shows
+     * over everything (the launcher, for one).
+     */
+    private fun dismissSystemDialog() {
+        if (device.findObject(By.textContains("isn't responding")) != null) {
+            device.findObject(By.text("Wait"))?.click()
+        }
+    }
 
     fun awaitGone(selector: BySelector, timeout: Long = 3_000) {
         if (!device.wait(Until.gone(selector), timeout)) fail("Still on screen after $timeout ms: $selector")

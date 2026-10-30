@@ -5,6 +5,8 @@
 set -u
 
 adb shell rm -rf /sdcard/Download/beandesk-ui
+# No "isn't responding" dialogs about other apps (the launcher, for one) over the tests.
+adb shell settings put global hide_error_dialogs 1
 ./gradlew :app:connectedDebugAndroidTest
 status=$?
 

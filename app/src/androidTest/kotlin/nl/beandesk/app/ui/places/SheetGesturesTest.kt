@@ -9,7 +9,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
 import nl.beandesk.app.data.location.LocationRepository
@@ -142,11 +141,11 @@ class SheetGesturesTest {
 
     /** Scrolls the list until the card is clear of the button at the bottom, then taps it. */
     private fun openPlace(name: String = "Koffiehuis Science Park") {
-        var card = finger.device.wait(Until.findObject(By.text(name)), 1_000)
+        var card = finger.find(By.text(name), 1_000)
         var tries = 0
         while ((card == null || card.visibleBounds.centerY() > finger.height * 0.7) && tries++ < 8) {
             finger.drag(0.7f, 0.45f)
-            card = finger.device.wait(Until.findObject(By.text(name)), 1_000)
+            card = finger.find(By.text(name), 1_000)
         }
         val bounds = (card ?: finger.fail("No card for $name")).visibleBounds
         // The left of the name: the map button sits in the middle at the bottom.
