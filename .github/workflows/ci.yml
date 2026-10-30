@@ -44,12 +44,20 @@ jobs:
       - name: UI-tests (app/src/androidTest)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          # A phone like the ones people use: Android 15, Pixel 6 screen, animations on.
+          api-level: 35
           arch: x86_64
           target: google_apis
-          disable-animations: true
-          # On a failure, print which test failed and why: the HTML report stays on the runner.
-          script: ./gradlew :app:connectedDebugAndroidTest || (find app/build/outputs/androidTest-results -name '*.xml' -exec grep -B2 -A25 '<failure' {} + ; exit 1)
+          profile: pixel_6
+          disable-animations: false
+          script: bash .github/scripts/android-ui-tests.sh
+      - name: Screenshots en schermopnames van de gebarentests
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ui-screens
+          path: ui-screens/
+          if-no-files-found: ignore
 
   search-function:
     name: Zoekfunctie (edge function)

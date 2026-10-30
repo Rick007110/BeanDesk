@@ -9,6 +9,7 @@ import {
   labelFor,
   looksLikePlace,
   normalizeQuery,
+  placeSplits,
   overpassQuery,
   parsePdok,
   parseRequest,
@@ -66,7 +67,18 @@ describe("lib", () => {
     // PDOK finds something for almost anything; "bonen" is not "Bonenburgerweg".
     assert.ok(!looksLikePlace("bonen", { ...street, label: "Bonenburgerweg, Ergens" }));
     assert.ok(!looksLikePlace("starbucks", town));
+    assert.ok(!looksLikePlace("coffeecompany breda", { ...town, label: "Breda" }));
     assert.equal(foldText(" Café Été "), "cafe ete");
+  });
+
+  it("reads a text as a name and a town in a few ways", () => {
+    assert.deepEqual(placeSplits("coffee company breda"), [
+      { name: "coffee company", place: "breda" },
+      { name: "company breda", place: "coffee" },
+      { name: "coffee", place: "company breda" },
+      { name: "breda", place: "coffee company" },
+    ]);
+    assert.deepEqual(placeSplits("starbucks"), []);
   });
 
   it("keeps the town of a woonplaats label", () => {
@@ -101,6 +113,10 @@ function fakes(
     pdokDown?: boolean;
     places?: unknown[];
     byName?: unknown[];
+    // What find_by_name returns when asked near a point (a name with a town).
+    byNameNear?: unknown[];
+    // PDOK answers per query; the default answers Amersfoort to everything.
+    pdokByQuery?: Record<string, Record<string, unknown> | null>;
   } = {},
 ) {
   const log: string[] = [];
@@ -120,7 +136,10 @@ function fakes(
       places = elements;
     },
     areaExport: async (_lat, _lng, radius, label) => ({ version: 1, city: label, radius_m: radius, places }),
-    nameSearch: async (_query, label) => ({ version: 1, city: label, places: options.byName ?? [] }),
+    nameSearch: async (query, label, near) => {
+      log.push(near ? `name near ${query}` : `name ${query}`);
+      return { version: 1, city: label, places: (near ? options.byNameNear : options.byName) ?? [] };
+    },
     placeLocation: async (id) => (id === 7 ? { lat: 52.09, lng: 5.12 } : null),
   };
   const fetchFake = (async (input: string | URL | Request) => {
@@ -128,6 +147,8 @@ function fakes(
     if (url.includes("pdok")) {
       log.push(`fetch ${new URL(url).host}`);
       if (options.pdokDown) return new Response("down", { status: 503 });
+      const q = new URL(url).searchParams.get("q") ?? "";
+      if (options.pdokByQuery && q in options.pdokByQuery) return Response.json(pdokAnswer(options.pdokByQuery[q]));
       return Response.json(options.pdok ?? pdokAnswer(AMERSFOORT));
     }
     log.push(`overpass ${new URL(url).host}`);
@@ -154,6 +175,7 @@ describe("search", () => {
     assert.deepEqual(first.body.search, { kind: "woonplaats", label: "Amersfoort", status: "fetched", fetched_cells: 2, pending_cells: 0 });
     assert.ok(cache.has("amersfoort"));
     assert.deepEqual(log, [
+      "name amersfoort",
       "fetch api.pdok.nl",
       "missing 4000 45 days",
       "overpass maps.mail.ru",
@@ -197,6 +219,25 @@ describe("search", () => {
     const { call } = fakes({ byName: [{ id: 1 }], places: [{ id: 5 }] });
     const result = await call({ q: "Amersfoort" });
     assert.equal(result.body.search.kind, "woonplaats");
+  });
+
+  it("finds a name around a town that OpenStreetMap does not record for the place", async () => {
+    const zwolle = { type: "woonplaats", weergavenaam: "Zwolle, Zwolle, Overijssel", centroide_ll: "POINT(6.09 52.51)" };
+    const { call, log } = fakes({
+      pdokByQuery: { "anne&max zwolle": zwolle, zwolle },
+      byNameNear: [{ id: 1 }],
+    });
+    const result = await call({ q: "Anne&Max Zwolle" });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.search.kind, "naam");
+    assert.ok(log.includes("name near anne&max"));
+  });
+
+  it("shows nothing rather than a whole town for a name it cannot find", async () => {
+    // PDOK finds Breda for "coffeecompany breda", but there is no such cafe in Breda.
+    const breda = { type: "woonplaats", weergavenaam: "Breda, Breda, Noord-Brabant", centroide_ll: "POINT(4.78 51.59)" };
+    const { call } = fakes({ pdok: pdokAnswer(breda), places: [{ id: 5 }] });
+    assert.deepEqual(await call({ q: "coffeecompany breda" }), { status: 404, body: { error: "not_found" } });
   });
 
   it("still finds by name when PDOK is down", async () => {

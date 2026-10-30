@@ -11,12 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import nl.beandesk.app.R
 
 /** Details of one place, sliding up over the list or the map. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceDetailSheet(
     item: PlaceItem,
@@ -41,7 +38,7 @@ fun PlaceDetailSheet(
     onReport: () -> Unit,
 ) {
     val place = item.place
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    BottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

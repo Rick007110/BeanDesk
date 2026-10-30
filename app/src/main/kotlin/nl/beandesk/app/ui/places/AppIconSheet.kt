@@ -1,5 +1,6 @@
 package nl.beandesk.app.ui.places
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,11 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,14 +31,14 @@ import nl.beandesk.app.R
 import nl.beandesk.app.icon.AppIcon
 
 /** Lets the user pick the launcher icon. */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppIconSheet(
     selected: AppIcon,
     onSelect: (AppIcon) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    BottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -70,7 +70,7 @@ fun AppIconSheet(
 
 @Composable
 private fun IconOption(icon: AppIcon, selected: Boolean, onClick: () -> Unit) {
-    val ring = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+    val ring by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, label = "ring")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier

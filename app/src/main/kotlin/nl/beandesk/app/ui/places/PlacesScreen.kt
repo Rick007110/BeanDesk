@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -149,6 +150,12 @@ private fun PlacesContent(
     onShowHomeArea: () -> Unit,
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    // Tapping a place closes the keyboard: left open, it covers the sheet that opens.
+    val selectPlace: (Long?) -> Unit = { id ->
+        focusManager.clearFocus()
+        onSelect(id)
+    }
     var showIconSheet by rememberSaveable { mutableStateOf(false) }
     var reportPlaceId by rememberSaveable { mutableStateOf<Long?>(null) }
     var recenterRequests by rememberSaveable { mutableIntStateOf(0) }
@@ -260,7 +267,7 @@ private fun PlacesContent(
                     userLocation = state.userLocation,
                     recenterRequests = recenterRequests,
                     styleUrl = BuildConfig.MAP_STYLE_URL,
-                    onPlaceClick = onSelect,
+                    onPlaceClick = selectPlace,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -272,7 +279,7 @@ private fun PlacesContent(
                     totalCount = state.totalCount,
                     isRefreshing = state.isRefreshing,
                     attribution = state.attribution,
-                    onPlaceClick = onSelect,
+                    onPlaceClick = selectPlace,
                     onClearFilters = onClearFilters,
                     modifier = Modifier
                         .fillMaxSize()
@@ -316,25 +323,10 @@ private fun PlacesContent(
         }
     }
 
+    // The report sheet opens over the place's sheet, which stays underneath: closing the report
+    // shows the place again without it sliding in anew.
     val selected = state.selected
-    val reporting = reportPlaceId
-    if (selected != null && reporting == selected.place.id) {
-        ReportSheet(
-            place = selected.place,
-            isSending = state.isSendingReport,
-            sendsReports = state.sendsReports,
-            onSend = { report ->
-                onReport(report) { done ->
-                    // Close both sheets, so the snackbar with the result is visible.
-                    if (done) {
-                        reportPlaceId = null
-                        onSelect(null)
-                    }
-                }
-            },
-            onDismiss = { reportPlaceId = null },
-        )
-    } else if (selected != null) {
+    if (selected != null) {
         PlaceDetailSheet(
             item = selected,
             showMapButton = state.showList,
@@ -343,6 +335,23 @@ private fun PlacesContent(
             onShowOnMap = { onShowOnMap(selected.place.id) },
             onReport = { reportPlaceId = selected.place.id },
         )
+        if (reportPlaceId == selected.place.id) {
+            ReportSheet(
+                place = selected.place,
+                isSending = state.isSendingReport,
+                sendsReports = state.sendsReports,
+                onSend = { report ->
+                    onReport(report) { done ->
+                        // Close both sheets, so the snackbar with the result is visible.
+                        if (done) {
+                            reportPlaceId = null
+                            onSelect(null)
+                        }
+                    }
+                },
+                onDismiss = { reportPlaceId = null },
+            )
+        }
     }
 
     if (showIconSheet) {
@@ -377,14 +386,12 @@ private fun SearchField(
             Text(stringResource(if (canSearchAreas) R.string.search_hint else R.string.search_hint_list_only))
         },
         leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
-        trailingIcon = if (text.isNotEmpty()) {
-            {
+        trailingIcon = {
+            AnimatedVisibility(text.isNotEmpty(), enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
                 IconButton(onClick = { onTextChange("") }) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.search_clear))
                 }
             }
-        } else {
-            null
         },
         singleLine = true,
         shape = RoundedCornerShape(28.dp),

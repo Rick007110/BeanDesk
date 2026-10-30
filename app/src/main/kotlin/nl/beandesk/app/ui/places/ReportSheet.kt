@@ -1,5 +1,7 @@
 package nl.beandesk.app.ui.places
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -16,10 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +46,6 @@ import nl.beandesk.core.model.WifiStatus
  * "Klopt dit nog?": a few taps on what the user sees now. Starts filled in with what is known,
  * so sending it unchanged confirms it. Takes well under ten seconds.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportSheet(
     place: Place,
@@ -69,13 +71,15 @@ fun ReportSheet(
     var stars by rememberSaveable(place.id) { mutableStateOf<Int?>(null) }
     val report = Report(place.id, wifi, power, quiet, laptop, closed, stars)
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    BottomSheet(onDismissRequest = onDismiss) {
+        // On a small screen the questions scroll; the send button stays in view below them.
         Column(
             modifier = Modifier
+                .weight(1f, fill = false)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -142,16 +146,25 @@ fun ReportSheet(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.report_closed), style = MaterialTheme.typography.bodyLarge)
             }
+        }
 
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Button(
                 onClick = { onSend(report) },
                 enabled = !report.isEmpty && !isSending,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                if (isSending) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.report_send))
+                Crossfade(isSending, label = "send") { sending ->
+                    if (sending) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(stringResource(R.string.report_send))
+                    }
                 }
             }
             Text(
@@ -171,10 +184,25 @@ private fun <T> ChoiceRow(label: Int, options: List<Pair<T, Int>>, selected: T?,
         Text(stringResource(label), style = MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { (value, text) ->
+                val isSelected = value == selected
                 FilterChip(
-                    selected = value == selected,
-                    onClick = { onSelect(if (value == selected) null else value) },
+                    selected = isSelected,
+                    onClick = { onSelect(if (isSelected) null else value) },
                     label = { Text(stringResource(text)) },
+                    // Makes room for the check smoothly instead of jumping.
+                    modifier = Modifier.animateContentSize(),
+                    // A check on the chosen answer, so a tap visibly lands.
+                    leadingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
             }
         }
