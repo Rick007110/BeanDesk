@@ -146,6 +146,9 @@ class LongFormSheetTest {
                         }
                     }
                     Button(onClick = { sent = true }) { Text(if (sent) "Verstuurd" else "Versturen") }
+                    // As in the report sheet, a line under the button keeps it clear of the
+                    // gesture bar at the bottom of the screen.
+                    Text("Einde van het formulier")
                 }
             }
         }
