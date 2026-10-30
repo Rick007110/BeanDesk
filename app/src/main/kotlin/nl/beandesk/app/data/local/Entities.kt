@@ -4,9 +4,13 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "places", indices = [Index("city")])
+/**
+ * One row per place per downloaded area. [city] is the key of that area: a city slug such as
+ * "utrecht", or "zoek:<label>" for a search. Areas can overlap, so a place can be in several.
+ */
+@Entity(tableName = "places", primaryKeys = ["city", "id"], indices = [Index("id")])
 data class PlaceEntity(
-    @PrimaryKey val id: Long,
+    val id: Long,
     val city: String,
     val category: String,
     val name: String,
@@ -27,10 +31,12 @@ data class PlaceEntity(
     val updatedAt: String,
 )
 
-/** One row per downloaded city: what the app needs besides the places themselves. */
+/** One row per downloaded area (city or search): what the app needs besides the places themselves. */
 @Entity(tableName = "cities")
 data class CityEntity(
     @PrimaryKey val city: String,
+    // What the app shows: "Utrecht", "Amersfoort" or "Oudegracht 10, 3511AM Utrecht".
+    val label: String,
     val timezone: String,
     val generatedAt: String,
     val attribution: String,

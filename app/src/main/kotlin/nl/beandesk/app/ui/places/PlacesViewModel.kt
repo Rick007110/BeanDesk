@@ -26,10 +26,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import nl.beandesk.app.BeanDeskApplication
 import nl.beandesk.app.BuildConfig
+import nl.beandesk.app.data.Area
 import nl.beandesk.app.data.CityInfo
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.location.LocationRepository
+import nl.beandesk.app.data.remote.SearchException
+import nl.beandesk.app.data.remote.SearchFailure
 import nl.beandesk.core.filter.PlaceFilter
+import nl.beandesk.core.filter.matchesText
 import nl.beandesk.core.geo.distanceMeters
 import nl.beandesk.core.hours.OpenStatus
 import nl.beandesk.core.hours.OpeningHours
@@ -45,7 +49,16 @@ import java.util.Locale
 data class PlaceItem(val place: Place, val status: OpenStatus, val distanceMeters: Double? = null)
 
 data class PlacesUiState(
-    val cityName: String = "",
+    // The city, or the town or address that was searched.
+    val areaName: String = "",
+    val areaKey: String = "",
+    // True after a search, so the screen can offer the way back to the city ([homeName]).
+    val isSearchArea: Boolean = false,
+    val homeName: String = "",
+    val searchText: String = "",
+    val isSearching: Boolean = false,
+    // False with sample data: then only the list itself can be searched.
+    val canSearchAreas: Boolean = true,
     val items: List<PlaceItem> = emptyList(),
     // Visible places before the filters, for "3 van 11".
     val totalCount: Int = 0,
@@ -66,10 +79,21 @@ data class PlacesUiState(
 )
 
 /** One-off messages for the snackbar. */
-enum class PlacesMessage { REPORT_SENT, REPORT_SAVED_LOCALLY, REPORT_RATE_LIMITED, REPORT_FAILED }
+enum class PlacesMessage {
+    REPORT_SENT,
+    REPORT_SAVED_LOCALLY,
+    REPORT_RATE_LIMITED,
+    REPORT_FAILED,
+    SEARCH_NOT_FOUND,
+    SEARCH_UNAVAILABLE,
+    SEARCH_FAILED,
+}
 
 private data class UiFlags(
     val filter: PlaceFilter = PlaceFilter(),
+    // What is typed in the search field; narrows the list while typing.
+    val searchText: String = "",
+    val isSearching: Boolean = false,
     val selectedId: Long? = null,
     val focusId: Long? = null,
     // The list is the start screen; the map is one tap away.
@@ -79,12 +103,17 @@ private data class UiFlags(
     val isSendingReport: Boolean = false,
 )
 
+private data class AreaData(val area: Area, val places: List<Place>, val info: CityInfo?)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlacesViewModel(
     private val repository: PlaceRepository,
     private val locationRepository: LocationRepository,
-    private val city: String,
+    city: String,
+    private val canSearchAreas: Boolean,
 ) : ViewModel() {
+    private val homeArea = Area(key = city, label = city.replaceFirstChar { it.titlecase(Locale.ROOT) })
+    private val area = MutableStateFlow(homeArea)
     private val flags = MutableStateFlow(UiFlags())
     private val locationGranted = MutableStateFlow(false)
     private val messageChannel = Channel<PlacesMessage>(Channel.BUFFERED)
@@ -107,15 +136,15 @@ class PlacesViewModel(
         if (granted) locationRepository.updates() else flowOf(null)
     }
 
+    private val areaData: Flow<AreaData> = area.flatMapLatest { current ->
+        combine(repository.places(current.key), repository.cityInfo(current.key)) { places, info ->
+            AreaData(current, places, info)
+        }
+    }
+
     val state: StateFlow<PlacesUiState> =
-        combine(
-            repository.places(city),
-            repository.cityInfo(city),
-            flags,
-            userLocation,
-            minuteTicks,
-        ) { places, info, uiFlags, location, _ ->
-            buildState(places, info, uiFlags, location)
+        combine(areaData, flags, userLocation, minuteTicks) { data, uiFlags, location, _ ->
+            buildState(data, uiFlags, location)
         }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlacesUiState())
@@ -124,21 +153,62 @@ class PlacesViewModel(
         refresh()
     }
 
+    /** Downloads the current area again: the city, or the last search. */
     fun refresh() {
         if (flags.value.isRefreshing) return
+        val current = area.value
         viewModelScope.launch {
             flags.update { it.copy(isRefreshing = true, hasError = false) }
             val failed = try {
-                repository.refresh(city)
+                if (current.query != null) repository.search(current.query) else repository.refresh(current.key)
                 false
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Refreshing $city failed", e)
+                Log.w(TAG, "Refreshing ${current.key} failed", e)
                 true
             }
             flags.update { it.copy(isRefreshing = false, hasError = failed) }
         }
+    }
+
+    fun setSearchText(text: String) = flags.update { it.copy(searchText = text) }
+
+    /**
+     * Looks up the typed town or address and shows the places around it. The first search of
+     * an area can take a while: the backend then fetches it from OpenStreetMap.
+     */
+    fun searchArea() {
+        val query = flags.value.searchText.trim()
+        if (query.length < 2 || flags.value.isSearching || !canSearchAreas) return
+        viewModelScope.launch {
+            flags.update { it.copy(isSearching = true) }
+            try {
+                val found = repository.search(query)
+                area.value = found
+                // The text was a place, not a name to filter on; the list now shows that place.
+                flags.update { it.copy(searchText = "", selectedId = null, focusId = null, hasError = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Searching \"$query\" failed", e)
+                messageChannel.send(
+                    when ((e as? SearchException)?.reason) {
+                        SearchFailure.NOT_FOUND -> PlacesMessage.SEARCH_NOT_FOUND
+                        SearchFailure.UNAVAILABLE -> PlacesMessage.SEARCH_UNAVAILABLE
+                        else -> PlacesMessage.SEARCH_FAILED
+                    },
+                )
+            } finally {
+                flags.update { it.copy(isSearching = false) }
+            }
+        }
+    }
+
+    /** Back from a search to the city. */
+    fun showHomeArea() {
+        area.value = homeArea
+        flags.update { it.copy(selectedId = null, focusId = null, hasError = false) }
     }
 
     fun setLocationGranted(granted: Boolean) {
@@ -147,7 +217,7 @@ class PlacesViewModel(
 
     fun setFilter(filter: PlaceFilter) = flags.update { it.copy(filter = filter) }
 
-    fun clearFilters() = flags.update { it.copy(filter = PlaceFilter()) }
+    fun clearFilters() = flags.update { it.copy(filter = PlaceFilter(), searchText = "") }
 
     /** Opens the detail sheet of a place, or closes it with null. */
     fun select(placeId: Long?) = flags.update {
@@ -179,26 +249,36 @@ class PlacesViewModel(
             flags.update { it.copy(isSendingReport = false) }
             messageChannel.send(message)
             onDone(message == PlacesMessage.REPORT_SENT || message == PlacesMessage.REPORT_SAVED_LOCALLY)
+            if (message == PlacesMessage.REPORT_SENT) repository.refreshAround(report.placeId)
         }
     }
 
-    private fun buildState(places: List<Place>, info: CityInfo?, flags: UiFlags, location: LatLng?): PlacesUiState {
+    private fun buildState(data: AreaData, flags: UiFlags, location: LatLng?): PlacesUiState {
+        val (current, places, info) = data
         val now = ZonedDateTime.now(ZoneId.of(info?.timezone ?: DEFAULT_TIMEZONE))
         val at = WeekTime(Weekday.entries[now.dayOfWeek.value - 1], now.hour * 60 + now.minute)
         val visible = places.filterNot { it.isReportedClosed }
+        // After a search the nearest to the searched place come first, otherwise the nearest to the user.
+        val anchor = if (current != homeArea) info?.center else location
         val items = visible
             .map { PlaceItem(it, statusOf(it, at), location?.let { here -> distanceMeters(here, it.location) }) }
-            .filter { flags.filter.matches(it.place, it.status, at) }
-            // Open places first, then the nearest (or by name while the location is unknown).
+            .filter { flags.filter.matches(it.place, it.status, at) && it.place.matchesText(flags.searchText) }
+            // Open places first, then the nearest (or by name while there is nothing to measure from).
             .sortedWith(
                 compareBy<PlaceItem>(
                     { it.status.sortRank() },
-                    { it.distanceMeters ?: Double.MAX_VALUE },
+                    { item -> anchor?.let { distanceMeters(it, item.place.location) } ?: Double.MAX_VALUE },
                     { it.place.name.lowercase() },
                 ),
             )
         return PlacesUiState(
-            cityName = city.replaceFirstChar { it.titlecase(Locale.ROOT) },
+            areaName = info?.label ?: current.label,
+            areaKey = current.key,
+            isSearchArea = current != homeArea,
+            homeName = homeArea.label,
+            searchText = flags.searchText,
+            isSearching = flags.isSearching,
+            canSearchAreas = canSearchAreas,
             items = items,
             totalCount = visible.size,
             filter = flags.filter,
@@ -238,6 +318,7 @@ class PlacesViewModel(
                     repository = app.container.placeRepository,
                     locationRepository = app.container.locationRepository,
                     city = BuildConfig.DEFAULT_CITY,
+                    canSearchAreas = !BuildConfig.USE_SAMPLE_DATA,
                 )
             }
         }

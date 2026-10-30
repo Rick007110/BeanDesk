@@ -4,11 +4,15 @@ import android.content.Context
 import androidx.room.Room
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
 import nl.beandesk.app.data.location.LocationRepository
+import nl.beandesk.app.data.remote.AreaSearchClient
+import nl.beandesk.app.data.remote.AreaSearchSource
 import nl.beandesk.app.data.remote.CityExportClient
 import nl.beandesk.app.data.remote.CityExportSource
+import nl.beandesk.app.data.remote.NoAreaSearch
 import nl.beandesk.app.data.remote.SampleCityExportSource
 import nl.beandesk.app.data.remote.SupabaseBackend
 import nl.beandesk.app.icon.AppIconManager
@@ -20,16 +24,26 @@ class AppContainer(context: Context) {
         .fallbackToDestructiveMigration(dropAllTables = true)
         .build()
 
+    private val http by lazy {
+        HttpClient(OkHttp) {
+            expectSuccess = true
+            install(HttpTimeout)
+        }
+    }
+
     // USE_SAMPLE_DATA is always false in release builds (see app/build.gradle.kts).
     private val exportSource: CityExportSource =
         if (BuildConfig.USE_SAMPLE_DATA) {
             SampleCityExportSource(context.assets)
         } else {
-            CityExportClient(
-                http = HttpClient(OkHttp) { expectSuccess = true },
-                supabaseUrl = BuildConfig.SUPABASE_URL,
-                anonKey = BuildConfig.SUPABASE_ANON_KEY,
-            )
+            CityExportClient(http, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+        }
+
+    private val searchSource: AreaSearchSource =
+        if (BuildConfig.USE_SAMPLE_DATA) {
+            NoAreaSearch
+        } else {
+            AreaSearchClient(http, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
         }
 
     // Sample places do not exist in the database, so reports about them stay on the phone.
@@ -43,6 +57,7 @@ class AppContainer(context: Context) {
     val placeRepository = PlaceRepository(
         dao = database.placeDao(),
         source = exportSource,
+        searchSource = searchSource,
         backend = backend,
     )
 
