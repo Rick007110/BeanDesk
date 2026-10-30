@@ -9,6 +9,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
 import nl.beandesk.app.DutchRule
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
@@ -65,7 +66,7 @@ class SheetGesturesTest {
         finger.fling(0.85f, 0.4f)
         finger.shot("scrolled")
         finger.tapUntilSelected(By.desc("4 van 5 sterren"))
-        finger.tapUntilSelected(By.text("Druk"))
+        finger.tapUntilSelected(DRUK)
         finger.tap(By.text("Versturen"), expect = By.text("Opgeslagen op je telefoon (voorbeeldmodus)."))
         finger.awaitGone(By.text("Wat klopt er nu?"))
         finger.awaitGone(By.text("Fietsroute"))
@@ -112,13 +113,19 @@ class SheetGesturesTest {
         finger.shot("scrolled")
         finger.pullDown(finger.await(By.text("Wat klopt er nu?")))
         finger.awaitGone(By.text("Wat klopt er nu?"))
-        // The place's sheet is still there underneath and goes the same way.
-        finger.pullDown(finger.await(By.text("Fietsroute")))
+        // The place's sheet is still there underneath, scrolled down to "Melden"; back at its top it
+        // goes the same way.
+        finger.pullDown(finger.revealAbove(By.text("Fietsroute")))
         finger.awaitGone(By.text("Fietsroute"))
         finger.shot("swiped-away")
         finger.tapUntilSelected(By.text("Laptop ok"))
         openPlace()
         finger.tap(By.text("Melden"), expect = By.text("Wat klopt er nu?"))
+    }
+
+    private companion object {
+        // The answer in the report sheet; the place's sheet underneath has "Druk" for the weekend.
+        val DRUK: BySelector = By.text("Druk").checkable(true)
     }
 
     /** The places screen with the sample places, as in the app; [small] as on a small phone. */

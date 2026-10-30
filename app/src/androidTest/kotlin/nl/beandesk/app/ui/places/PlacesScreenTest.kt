@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -143,7 +144,8 @@ class PlacesScreenTest {
 
         // Every tap lands: a star, an answer further down and the send button, which is in view.
         compose.onNodeWithContentDescription("4 van 5 sterren").performClick().assertIsSelected()
-        compose.onNodeWithText("Druk").performScrollTo().performClick().assertIsSelected()
+        // The answer, not "Druk" for the weekend on the place's sheet underneath.
+        compose.onNode(hasText("Druk") and hasClickAction()).performScrollTo().performClick().assertIsSelected()
         compose.onNodeWithText("Versturen").assertIsDisplayed().assertIsEnabled().performClick()
 
         // Sample mode: the report stays on the phone, both sheets close and the card shows the stars.
