@@ -6,6 +6,13 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -214,21 +221,30 @@ private fun PlacesContent(
                     homeName = state.homeName,
                     onShowHomeArea = onShowHomeArea,
                 )
-                if (state.isRefreshing || state.isSearching) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (state.hasError) ErrorBanner(onRetry)
+                AnimatedVisibility(state.isRefreshing || state.isSearching) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                AnimatedVisibility(state.hasError) { ErrorBanner(onRetry) }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                text = { Text(stringResource(if (state.showList) R.string.show_map else R.string.show_list)) },
+                text = {
+                    Crossfade(state.showList, label = "fab text") { showList ->
+                        Text(stringResource(if (showList) R.string.show_map else R.string.show_list))
+                    }
+                },
                 icon = {
-                    Icon(
-                        painter = painterResource(if (state.showList) R.drawable.ic_map else R.drawable.ic_list),
-                        contentDescription = null,
-                    )
+                    Crossfade(state.showList, label = "fab icon") { showList ->
+                        Icon(
+                            painter = painterResource(if (showList) R.drawable.ic_map else R.drawable.ic_list),
+                            contentDescription = null,
+                        )
+                    }
                 },
                 onClick = onToggleList,
+                modifier = Modifier.animateContentSize(),
             )
         },
         floatingActionButtonPosition = FabPosition.Center,
@@ -251,7 +267,8 @@ private fun PlacesContent(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (state.showList) {
+            // The list fades over the map, which stays underneath once opened.
+            AnimatedVisibility(state.showList, enter = fadeIn(), exit = fadeOut()) {
                 PlaceList(
                     items = state.items,
                     totalCount = state.totalCount,
@@ -276,7 +293,15 @@ private fun PlacesContent(
                         },
                     ),
                 )
-            } else {
+            }
+            AnimatedVisibility(
+                visible = !state.showList,
+                enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+            ) {
                 SmallFloatingActionButton(
                     onClick = {
                         if (locationAccess == LocationAccess.NONE) {
@@ -285,9 +310,6 @@ private fun PlacesContent(
                             recenterRequests++
                         }
                     },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp),
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_my_location),
@@ -396,7 +418,7 @@ private fun listHeader(
 ): (@Composable () -> Unit)? {
     if (searchText == null && !showLocationPrompt) return null
     val header: @Composable () -> Unit = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (searchText != null) SearchAreaCard(searchText.trim(), isSearching, onSearchArea)
             if (showLocationPrompt) locationPrompt()
         }
@@ -457,12 +479,15 @@ private fun FilterBar(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (searchedArea != null) {
+        // Keeps the label while the chip animates away.
+        var shownArea by remember { mutableStateOf(searchedArea.orEmpty()) }
+        if (searchedArea != null) shownArea = searchedArea
+        AnimatedVisibility(searchedArea != null) {
             // The searched place, with the way back to the city.
             InputChip(
                 selected = true,
                 onClick = onShowHomeArea,
-                label = { Text(searchedArea, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                label = { Text(shownArea, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 leadingIcon = {
                     Icon(painterResource(R.drawable.ic_place), contentDescription = null, Modifier.size(InputChipDefaults.IconSize))
                 },

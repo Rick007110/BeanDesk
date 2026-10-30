@@ -1,5 +1,6 @@
 package nl.beandesk.app.ui.places
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -60,15 +62,18 @@ fun PlaceList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (header != null) {
-            item { header() }
+            item(key = "header") { Box(Modifier.animateItem()) { header() } }
         }
         if (items.isEmpty()) {
             if (!isRefreshing) {
-                item { EmptyState(filtered = totalCount > 0, onClearFilters = onClearFilters) }
+                item(key = "empty") {
+                    EmptyState(filtered = totalCount > 0, onClearFilters = onClearFilters, modifier = Modifier.animateItem())
+                }
             }
         } else {
-            item {
+            item(key = "count") {
                 Text(
+                    modifier = Modifier.animateItem(),
                     text = if (items.size == totalCount) {
                         pluralStringResource(R.plurals.places_count, totalCount, totalCount)
                     } else {
@@ -79,11 +84,12 @@ fun PlaceList(
                 )
             }
         }
+        // Cards fade in and out and slide to their new spot when filters or the search change the list.
         items(items, key = { it.place.id }) { item ->
-            PlaceCard(item, onClick = { onPlaceClick(item.place.id) })
+            PlaceCard(item, onClick = { onPlaceClick(item.place.id) }, modifier = Modifier.animateItem())
         }
         if (attribution.isNotEmpty()) {
-            item {
+            item(key = "attribution") {
                 Text(
                     text = attribution,
                     style = MaterialTheme.typography.labelSmall,
@@ -97,13 +103,13 @@ fun PlaceList(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PlaceCard(item: PlaceItem, onClick: () -> Unit) {
+private fun PlaceCard(item: PlaceItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val place = item.place
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(Modifier.padding(16.dp)) {
             CategoryBadge(place.category, size = 48.dp)
@@ -165,7 +171,8 @@ fun CategoryBadge(category: Category, size: Dp) {
 /** A coloured dot with "Nu open · sluit over 2 u" and the like. */
 @Composable
 fun StatusLine(status: OpenStatus) {
-    val color = statusColor(status)
+    // Fades to the new colour when a place opens or closes while the screen is open.
+    val color by animateColorAsState(statusColor(status), label = "status")
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
@@ -199,9 +206,9 @@ private fun FactPill(chip: FactChip) {
 }
 
 @Composable
-private fun EmptyState(filtered: Boolean, onClearFilters: () -> Unit) {
+private fun EmptyState(filtered: Boolean, onClearFilters: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(top = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
