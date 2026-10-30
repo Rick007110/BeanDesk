@@ -36,6 +36,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestName
 import org.junit.runner.RunWith
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A long form in the app's [BottomSheet], scrolled and flicked through like a thumb, with a tap
@@ -48,6 +49,9 @@ class LongFormSheetTest {
 
     private val finger by lazy { Finger(testName.methodName) }
     private var scenario: ActivityScenario<ComponentActivity>? = null
+
+    // Set by the form's send button, read by the test thread.
+    private val sent = AtomicBoolean(false)
 
     @After
     fun tearDown() {
@@ -82,7 +86,7 @@ class LongFormSheetTest {
         finger.fling(0.85f, 0.35f)
         finger.fling(0.85f, 0.35f)
         finger.shot("bottom")
-        finger.tap(By.text("Versturen"), expect = By.text("Verstuurd"))
+        finger.tap(By.text("Versturen"), what = "sending") { sent.get() }
 
         // Back to the top and pull the sheet away; the screen behind must react.
         repeat(6) { finger.drag(0.35f, 0.5f, steps = 100) }
@@ -145,7 +149,12 @@ class LongFormSheetTest {
                             }
                         }
                     }
-                    Button(onClick = { sent = true }) { Text(if (sent) "Verstuurd" else "Versturen") }
+                    Button(
+                        onClick = {
+                            sent = true
+                            this@LongFormSheetTest.sent.set(true)
+                        },
+                    ) { Text(if (sent) "Verstuurd" else "Versturen") }
                     // As in the report sheet, a line under the button keeps it clear of the
                     // gesture bar at the bottom of the screen.
                     Text("Einde van het formulier")

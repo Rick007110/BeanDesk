@@ -34,6 +34,21 @@ class Finger(private val name: String) {
         shot("tapped")
     }
 
+    /**
+     * Taps the middle of [selector] and waits until [landed] says the app handled it. For a change
+     * inside a dialog window: what UiAutomator reads of the screen can lag seconds behind there.
+     */
+    fun tap(selector: BySelector, what: String, landed: () -> Boolean) {
+        val bounds = reveal(selector).visibleBounds
+        device.click(bounds.centerX(), bounds.centerY())
+        val deadline = System.currentTimeMillis() + 3_000
+        while (!landed()) {
+            if (System.currentTimeMillis() > deadline) fail("Tapped $selector at ${bounds.toShortString()}, but $what did not happen")
+            Thread.sleep(100)
+        }
+        shot("tapped")
+    }
+
     /** Taps [selector] and checks it is selected afterwards, which proves the tap landed. */
     fun tapUntilSelected(selector: BySelector) {
         val bounds = reveal(selector).visibleBounds
