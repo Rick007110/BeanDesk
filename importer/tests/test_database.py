@@ -400,3 +400,24 @@ def test_users_cannot_use_search_internals(conn, role, statement):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         conn.execute(f"set local role {role}")
         conn.execute(statement)
+
+
+# --- Import from an OpenStreetMap extract (osm_extract.py) ---------------------------------
+
+def test_extract_import_adds_places_and_marks_its_cells(conn, overpass_elements):
+    data = {
+        "generated_at": "2026-11-01T02:30:00+00:00",
+        "cells": [[c["lat_index"], c["lng_index"]] for c in FIXTURE_CELLS],
+        "elements": overpass_elements,
+    }
+    result = conn.execute("select public.import_osm_extract(%s)", (psycopg.types.json.Jsonb(data),)).fetchone()[0]
+
+    assert (result["cells"], result["inserted"], result["generated_at"]) == (2, 4, "2026-11-01T02:30:00+00:00")
+    assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+    assert len(area_export(conn)["places"]) == 4
+
+
+def test_users_cannot_run_the_extract_import(conn):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute("set local role authenticated")
+        conn.execute("select public.import_osm_file('https://example.com')")

@@ -9,6 +9,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+# For osm_extract: turning an OpenStreetMap extract into an import file.
+extract = ["osmium>=4", "shapely>=2"]
 
 [tool.setuptools]
 packages = ["beandesk_import"]
