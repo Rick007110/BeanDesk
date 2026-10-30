@@ -49,7 +49,7 @@ jobs:
           target: google_apis
           disable-animations: true
           # On a failure, print which test failed and why: the HTML report stays on the runner.
-          script: ./gradlew :app:connectedDebugAndroidTest || (find app/build/outputs/androidTest-results -name '*.xml' -exec grep -B2 -A25 '<failure' {} + ; exit 1)
+          script: ./gradlew :app:connectedDebugAndroidTest || (find app/build/outputs/androidTest-results -name '*.xml' -exec grep -B2 -A60 '<failure' {} + ; exit 1)
 
   search-function:
     name: Zoekfunctie (edge function)

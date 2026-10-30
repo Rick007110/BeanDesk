@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -149,6 +150,12 @@ private fun PlacesContent(
     onShowHomeArea: () -> Unit,
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    // Tapping a place closes the keyboard: left open, it covers the sheet that opens.
+    val selectPlace: (Long?) -> Unit = { id ->
+        focusManager.clearFocus()
+        onSelect(id)
+    }
     var showIconSheet by rememberSaveable { mutableStateOf(false) }
     var reportPlaceId by rememberSaveable { mutableStateOf<Long?>(null) }
     var recenterRequests by rememberSaveable { mutableIntStateOf(0) }
@@ -260,7 +267,7 @@ private fun PlacesContent(
                     userLocation = state.userLocation,
                     recenterRequests = recenterRequests,
                     styleUrl = BuildConfig.MAP_STYLE_URL,
-                    onPlaceClick = onSelect,
+                    onPlaceClick = selectPlace,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -272,7 +279,7 @@ private fun PlacesContent(
                     totalCount = state.totalCount,
                     isRefreshing = state.isRefreshing,
                     attribution = state.attribution,
-                    onPlaceClick = onSelect,
+                    onPlaceClick = selectPlace,
                     onClearFilters = onClearFilters,
                     modifier = Modifier
                         .fillMaxSize()

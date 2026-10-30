@@ -1,13 +1,21 @@
 package nl.beandesk.app.ui.places
 
 import android.content.Context
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -116,6 +124,29 @@ class PlacesScreenTest {
         // Well within the two-second pause.
         compose.waitUntil(1_500) { compose.onAllNodesWithText("2 plekken").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf("Amersfoort"), search.queries)
+    }
+
+    @Test
+    fun aReportWithStarsAndAnswersIsSentAndClosesTheSheets() {
+        showScreen()
+        val list = compose.onNode(hasScrollToNodeAction())
+        list.performScrollToNode(hasText("Koffiehuis Science Park"))
+        compose.onNodeWithText("Koffiehuis Science Park").performClick()
+        compose.onNodeWithText("Melden").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Wat klopt er nu?").assertIsDisplayed()
+
+        // Every tap lands: a star, an answer further down and the send button, which is in view.
+        compose.onNodeWithContentDescription("4 van 5 sterren").performClick().assertIsSelected()
+        compose.onNodeWithText("Druk").performScrollTo().performClick().assertIsSelected()
+        compose.onNodeWithText("Versturen").assertIsDisplayed().assertIsEnabled().performClick()
+
+        // Sample mode: the report stays on the phone, both sheets close and the card shows the stars.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("Opgeslagen op je telefoon (voorbeeldmodus).").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Wat klopt er nu?").assertDoesNotExist()
+        compose.onNodeWithText("Melden").assertDoesNotExist()
+        list.performScrollToNode(hasContentDescription("4,0 van 5 sterren, 1 beoordelingen"))
     }
 
     /** Answers every search with the first two sample places, labelled "Amersfoort". */

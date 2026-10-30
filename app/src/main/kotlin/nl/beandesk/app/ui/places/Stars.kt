@@ -16,6 +16,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import nl.beandesk.app.R
@@ -68,7 +70,10 @@ fun StarPicker(selected: Int?, onSelect: (Int?) -> Unit, modifier: Modifier = Mo
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         for (star in 1..5) {
             val filled = selected != null && star <= selected
-            IconButton(onClick = { onSelect(if (selected == star) null else star) }) {
+            IconButton(
+                onClick = { onSelect(if (selected == star) null else star) },
+                modifier = Modifier.semantics { this.selected = star == selected },
+            ) {
                 Icon(
                     painter = painterResource(if (filled) R.drawable.ic_star else R.drawable.ic_star_outline),
                     contentDescription = stringResource(R.string.report_star, star),
