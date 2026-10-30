@@ -1,0 +1,46 @@
+# BeanDesk's own Overpass server: only the Netherlands, updated daily from Geofabrik, behind
+# Caddy, which lets through only requests with our key. install.sh sets it up; see README.md.
+services:
+  overpass:
+    image: wiktorn/overpass-api:v0.7.62.11
+    restart: unless-stopped
+    environment:
+      OVERPASS_MODE: init
+      OVERPASS_META: "no"
+      OVERPASS_PLANET_URL: https://download.geofabrik.de/europe/netherlands-latest.osm.pbf
+      # The extract is a .pbf; Overpass wants .osm.bz2.
+      OVERPASS_PLANET_PREPROCESS: >-
+        mv /db/planet.osm.bz2 /db/planet.osm.pbf &&
+        osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf &&
+        rm /db/planet.osm.pbf
+      OVERPASS_DIFF_URL: https://download.geofabrik.de/europe/netherlands-updates/
+      OVERPASS_UPDATE_SLEEP: "3600"
+      OVERPASS_COMPRESSION: gz
+      # BeanDesk asks for bounding boxes, never for areas.
+      OVERPASS_USE_AREAS: "false"
+      OVERPASS_RULES_LOAD: "1"
+      OVERPASS_MAX_TIMEOUT: "120"
+      OVERPASS_SPACE: "2147483648"
+    volumes:
+      - overpass-db:/db
+    # Only Caddy reaches it.
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    depends_on:
+      - overpass
+    env_file: .env
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${PLAIN_PORT:-8090}:8090"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+volumes:
+  overpass-db:
+  caddy-data:

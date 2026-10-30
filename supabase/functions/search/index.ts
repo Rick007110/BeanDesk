@@ -72,4 +72,8 @@ const store: Store = {
   },
 };
 
-Deno.serve(createHandler({ store, fetch, now: () => new Date() }));
+// Our own Overpass server, when there is one (infra/overpass); otherwise only the public ones.
+const ownOverpassUrl = Deno.env.get("OVERPASS_URL");
+const ownOverpass = ownOverpassUrl ? { url: ownOverpassUrl, key: Deno.env.get("OVERPASS_KEY") } : undefined;
+
+Deno.serve(createHandler({ store, fetch, now: () => new Date(), ownOverpass }));

@@ -27,8 +27,11 @@ import nl.beandesk.core.model.Report
 import nl.beandesk.core.model.WifiStatus
 import nl.beandesk.core.model.withReport
 import nl.beandesk.core.model.withStars
+import java.time.Duration
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeParseException
 
 data class CityInfo(val label: String, val timezone: String, val attribution: String, val center: LatLng?)
 
@@ -70,12 +73,52 @@ class PlaceRepository(
         }
 
     /**
-     * Downloads the whole city again (some tens of KB). The export is built live by the
-     * database, so it already includes everyone's latest reports.
+     * Downloads what changed in the city since the last download; the first time, and once a
+     * week, the whole city (some tens of KB). The export is built live by the database, so it
+     * already includes everyone's latest reports.
      */
     suspend fun refresh(city: String) {
+        val known = dao.city(city)
+        if (known != null && isRecent(known.fullSyncedAt)) {
+            val changes = changesOrNull(city, since = known.generatedAt)
+            if (changes != null) {
+                dao.applyChanges(
+                    city = known.copy(
+                        timezone = changes.timezone,
+                        generatedAt = changes.generatedAt,
+                        attribution = changes.attribution,
+                    ),
+                    changed = changes.places.map { it.toEntity(city) },
+                    removed = changes.removed,
+                )
+                return
+            }
+        }
         val export = source.fetch(city)
         store(key = city, label = city.replaceFirstChar { it.titlecase() }, export = export)
+    }
+
+    /**
+     * The changes since [since], or null to download the whole city instead: the source has no
+     * changes (sample data), or asking failed, as against a database from before city_changes.
+     */
+    private suspend fun changesOrNull(city: String, since: String): CityExport? = try {
+        source.fetchChanges(city, since)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.i(TAG, "Downloading the changes in $city failed; downloading all of it", e)
+        null
+    }
+
+    /**
+     * Whether the last whole download is less than a week old. Changes cover nearly everything,
+     * but not what only time changes, such as reports leaving the last 12 months.
+     */
+    private fun isRecent(generatedAt: String): Boolean = try {
+        Duration.between(OffsetDateTime.parse(generatedAt).toInstant(), Instant.now()) < FULL_DOWNLOAD_EVERY
+    } catch (e: DateTimeParseException) {
+        false
     }
 
     /**
@@ -101,6 +144,7 @@ class PlaceRepository(
                 attribution = export.attribution,
                 centerLat = export.center?.lat,
                 centerLng = export.center?.lng,
+                fullSyncedAt = export.generatedAt,
             ),
             places = export.places.map { it.toEntity(key) },
         )
@@ -154,6 +198,7 @@ class PlaceRepository(
 private const val TAG = "PlaceRepository"
 private const val SEARCH_PREFIX = "zoek:"
 private val DUTCH_TIME = ZoneId.of("Europe/Amsterdam")
+private val FULL_DOWNLOAD_EVERY = Duration.ofDays(7)
 
 // Searched areas stay on the phone for offline use; the oldest go once there are more.
 private const val KEPT_SEARCHES = 10

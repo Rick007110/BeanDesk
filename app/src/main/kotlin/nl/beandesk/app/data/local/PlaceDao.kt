@@ -15,6 +15,9 @@ abstract class PlaceDao {
     @Query("SELECT * FROM cities WHERE city = :city")
     abstract fun observeCity(city: String): Flow<CityEntity?>
 
+    @Query("SELECT * FROM cities WHERE city = :city")
+    abstract suspend fun city(city: String): CityEntity?
+
     // A place in several areas has a copy in each; they are all the same.
     @Query("SELECT * FROM places WHERE id = :id LIMIT 1")
     abstract suspend fun place(id: Long): PlaceEntity?
@@ -46,6 +49,17 @@ abstract class PlaceDao {
         insertPlaces(places)
         upsertCity(city)
     }
+
+    /** Applies what changed since the last download: changed places in, removed places out. */
+    @Transaction
+    open suspend fun applyChanges(city: CityEntity, changed: List<PlaceEntity>, removed: List<Long>) {
+        insertPlaces(changed)
+        if (removed.isNotEmpty()) deletePlaces(city.city, removed)
+        upsertCity(city)
+    }
+
+    @Query("DELETE FROM places WHERE city = :city AND id IN (:ids)")
+    protected abstract suspend fun deletePlaces(city: String, ids: List<Long>)
 
     @Query("UPDATE places SET ratingAverage = :average, ratingCount = :count WHERE id = :id")
     abstract suspend fun setRating(id: Long, average: Double, count: Int)

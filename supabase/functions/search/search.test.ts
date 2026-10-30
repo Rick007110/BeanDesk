@@ -117,6 +117,9 @@ function fakes(
     byNameNear?: unknown[];
     // PDOK answers per query; the default answers Amersfoort to everything.
     pdokByQuery?: Record<string, Record<string, unknown> | null>;
+    ownOverpass?: { url: string; key?: string };
+    // Our own server is down, the public ones are not.
+    ownOverpassDown?: boolean;
   } = {},
 ) {
   const log: string[] = [];
@@ -142,7 +145,7 @@ function fakes(
     },
     placeLocation: async (id) => (id === 7 ? { lat: 52.09, lng: 5.12 } : null),
   };
-  const fetchFake = (async (input: string | URL | Request) => {
+  const fetchFake = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("pdok")) {
       log.push(`fetch ${new URL(url).host}`);
@@ -151,11 +154,18 @@ function fakes(
       if (options.pdokByQuery && q in options.pdokByQuery) return Response.json(pdokAnswer(options.pdokByQuery[q]));
       return Response.json(options.pdok ?? pdokAnswer(AMERSFOORT));
     }
-    log.push(`overpass ${new URL(url).host}`);
+    const key = new Headers(init?.headers).get("x-beandesk-key");
+    log.push(`overpass ${new URL(url).host}${key ? ` key ${key}` : ""}`);
     if (options.overpass === "down") return new Response("busy", { status: 429 });
+    if (options.ownOverpassDown && url === options.ownOverpass?.url) throw new TypeError("connection refused");
     return Response.json({ elements: [{ type: "node", id: 1 }, { type: "node", id: 2 }] });
   }) as typeof fetch;
-  const deps: Deps = { store, fetch: fetchFake, now: () => new Date("2026-10-30T12:00:00Z") };
+  const deps: Deps = {
+    store,
+    fetch: fetchFake,
+    now: () => new Date("2026-10-30T12:00:00Z"),
+    ownOverpass: options.ownOverpass,
+  };
   const call = async (body: unknown) => {
     const response = await createHandler(deps)(new Request("http://x/search", { method: "POST", body: JSON.stringify(body) }));
     return { status: response.status, body: await response.json() };
@@ -259,6 +269,25 @@ describe("search", () => {
       ["overpass maps.mail.ru", "overpass overpass.private.coffee", "overpass overpass-api.de"],
     );
     assert.ok(log.includes("record 1 0"), "failed attempts count towards the limit");
+  });
+
+  it("asks our own Overpass server first, with its key", async () => {
+    const own = { url: "http://203.0.113.7:8090/api/interpreter", key: "geheim" };
+    const { call, log } = fakes({ missing: [cell(2607, 179)], ownOverpass: own });
+    const result = await call({ q: "amersfoort" });
+    assert.equal(result.body.search.status, "fetched");
+    assert.deepEqual(log.filter((line) => line.startsWith("overpass ")), ["overpass 203.0.113.7:8090 key geheim"]);
+  });
+
+  it("falls back to the public servers when our own is down, without sending them the key", async () => {
+    const own = { url: "http://203.0.113.7:8090/api/interpreter", key: "geheim" };
+    const { call, log } = fakes({ missing: [cell(2607, 179)], ownOverpass: own, ownOverpassDown: true });
+    const result = await call({ q: "amersfoort" });
+    assert.equal(result.body.search.status, "fetched");
+    assert.deepEqual(log.filter((line) => line.startsWith("overpass ")), [
+      "overpass 203.0.113.7:8090 key geheim",
+      "overpass maps.mail.ru",
+    ]);
   });
 
   it("still answers from the database when Overpass is down", async () => {

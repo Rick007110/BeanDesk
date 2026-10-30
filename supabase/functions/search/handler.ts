@@ -30,10 +30,18 @@ export interface Store {
   placeLocation(placeId: number): Promise<{ lat: number; lng: number } | null>;
 }
 
+/** Our own Overpass server (infra/overpass): its address and the key it wants. */
+export interface OwnOverpass {
+  url: string;
+  key?: string;
+}
+
 export interface Deps {
   store: Store;
   fetch: typeof fetch;
   now: () => Date;
+  // Asked first when set (secrets OVERPASS_URL and OVERPASS_KEY); the public servers after it.
+  ownOverpass?: OwnOverpass;
 }
 
 /** One Overpass request covers at most this many cells; the rest follows with the next search. */
@@ -53,11 +61,31 @@ export const SEARCH_MAX_AGE = "45 days";
 // half a minute: someone is looking at a spinner. The public servers are busy, and when they
 // fail the search still answers with what the database has. overpass-api.de answers every
 // request from Supabase's network with 406 (an IP block, also on /api/status), so it comes last.
-const OVERPASS_ENDPOINTS = [
+const PUBLIC_OVERPASS = [
   { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", timeoutMs: 25_000 },
   { url: "https://overpass.private.coffee/api/interpreter", timeoutMs: 8_000 },
   { url: "https://overpass-api.de/api/interpreter", timeoutMs: 3_000 },
 ];
+
+interface OverpassEndpoint {
+  url: string;
+  timeoutMs: number;
+  key?: string;
+}
+
+/**
+ * Our own server first: it has only the Netherlands, is not shared and answers within seconds.
+ * When it is down, the public servers still give an answer, with less time each so the whole
+ * search stays within half a minute.
+ */
+export function overpassEndpoints(own?: OwnOverpass): OverpassEndpoint[] {
+  if (!own) return PUBLIC_OVERPASS;
+  return [
+    { url: own.url, timeoutMs: 15_000, key: own.key },
+    { url: PUBLIC_OVERPASS[0].url, timeoutMs: 10_000 },
+    ...PUBLIC_OVERPASS.slice(1),
+  ];
+}
 const USER_AGENT = "BeanDesk-search/0.1 (+https://github.com/Rick007110/BeanDesk)";
 
 type SyncStatus = "cached" | "fetched" | "partial" | "rate_limited" | "failed";
@@ -202,12 +230,14 @@ async function syncCells(deps: Deps, lat: number, lng: number, radiusM: number, 
 
 async function fetchOverpass(deps: Deps, cells: Cell[]): Promise<unknown[] | null> {
   const body = new URLSearchParams({ data: overpassQuery(cells) });
-  for (const { url: endpoint, timeoutMs } of OVERPASS_ENDPOINTS) {
+  for (const { url: endpoint, timeoutMs, key } of overpassEndpoints(deps.ownOverpass)) {
     try {
+      const headers: Record<string, string> = { "user-agent": USER_AGENT };
+      if (key) headers["x-beandesk-key"] = key;
       const response = await deps.fetch(endpoint, {
         method: "POST",
         body,
-        headers: { "user-agent": USER_AGENT },
+        headers,
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) {

@@ -1,0 +1,9 @@
+# OVERPASS_SITE is a host name (HTTPS with an automatic certificate, such as
+# 203-0-113-7.sslip.io) or ":8090" (plain HTTP). Only requests with our key get through.
+{$OVERPASS_SITE} {
+	@beandesk header X-BeanDesk-Key {$OVERPASS_KEY}
+	handle @beandesk {
+		reverse_proxy overpass:80
+	}
+	respond "Forbidden" 403
+}

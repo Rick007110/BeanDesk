@@ -23,7 +23,8 @@ create schema auth;
 
 create table auth.users (
     id uuid primary key default gen_random_uuid(),
-    is_anonymous boolean not null default false
+    is_anonymous boolean not null default false,
+    created_at timestamptz default now()
 );
 
 create function auth.uid() returns uuid

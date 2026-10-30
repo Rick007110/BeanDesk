@@ -20,7 +20,9 @@ De locatie van de gebruiker gaat dus nergens heen: bij zoeken verstuurt de app a
 | `app/` | Android-app: Kotlin, Jetpack Compose, MapLibre, Room, Ktor |
 | `core/` | Logica zonder Android: openingstijden, filters, afstand, routelink en het inlezen van de stad-export. Kan later naar Kotlin Multiplatform als er een iOS-app komt. |
 | `supabase/` | Migraties (schema, RLS-regels, triggers, import, export, de wekelijkse taak) en de edge function `search` |
-| `importer/` | Kleine Python-CLI om die databasefuncties aan te roepen, plus de databasetests |
+| `importer/` | Kleine Python-CLI om die databasefuncties aan te roepen (ook voor seeding), plus de databasetests |
+| `infra/overpass/` | Eigen Overpass-server met alleen Nederland, voor op de VPS |
+| `docs/seeding/` | Checklist om een buurt te vullen met echte bezoeken |
 | `.github/workflows/` | CI en de releases met APK |
 | `docs/brand/` | Logo, kleuren en het script dat alle logobestanden maakt |
 
@@ -65,7 +67,7 @@ supabase functions deploy search
 
 Migratie `20261030000000_search_areas` is via de SQL-editor in het dashboard gedraaid. Hij staat daarom niet in de migratiegeschiedenis van het project; `supabase db push` probeert hem dan opnieuw, en dat mislukt omdat de tabellen al bestaan. Markeer hem één keer als gedaan met `supabase migration repair --status applied 20261030000000`.
 
-Voor `20261030160000_dayparts_and_account_deletion` geldt hetzelfde als je hem in de SQL-editor plakt: markeer hem daarna met `supabase migration repair --status applied 20261030160000`. Zonder deze migratie blijft "drukte per dagdeel" leeg en mislukt "account verwijderen" in de app met een foutmelding.
+Voor `20261030160000_dayparts_and_account_deletion` en `20261030200000_delta_sync_and_account_cleanup` geldt hetzelfde als je ze in de SQL-editor plakt: markeer ze daarna met `supabase migration repair --status applied <versie>`. Zonder de eerste blijft "drukte per dagdeel" leeg en mislukt "account verwijderen" in de app met een foutmelding. Zonder de tweede haalt de app steeds de hele stad, blijven lege anonieme accounts staan en werkt `seed-import` niet.
 
 Anoniem inloggen moet aan staan (Authentication → Sign In / Providers → "Allow anonymous sign-ins"); daarzonder werkt het melden niet. In `supabase/config.toml` staat het voor lokaal gebruik al aan.
 
@@ -151,7 +153,11 @@ node --test supabase/functions/search/search.test.ts
 - **Locatie:** de app vraagt de locatie pas na een korte uitleg bovenaan de lijst, en alleen tijdens gebruik. Een globale locatie (Android 12+) werkt ook; de app legt dan uit waarom een precieze beter is. De locatie gaat nergens heen: de app sorteert en rekent afstanden op de telefoon uit.
 - **Melden:** de eerste melding maakt via Supabase een anoniem account aan (supabase-kt); daarna gaan meldingen rechtstreeks naar `place_reports`. De app past een melding meteen op de telefoon toe, en bij het volgende verversen staat hij bij iedereen.
 - **Stad-export uit de database:** de export wordt bij elke aanvraag live opgebouwd (zo'n 65 KB voor Utrecht) in plaats van als bestand in Storage. Dat scheelt een exportstap en een dagelijkse taak. Bij veel gebruikers kan er een cache of CDN voor.
-- **Kaart:** tijdens de ontwikkeling gebruikt de app de gratis stijl van OpenFreeMap. Kies vóór de launch een tegelprovider.
+- **Kaart:** OpenFreeMap: gratis, zonder sleutel, en commercieel gebruik mag. Bij de donkere weergave de stijl `dark`. Laadt OpenFreeMap niet, dan valt de kaart terug op VersaTiles, een tweede gratis dienst. De adressen staan in `gradle.properties`.
+- **Delta-sync:** de app haalt de hele stad de eerste keer en daarna eens per week. Daartussen haalt hij met `city_changes()` alleen de plekken die veranderd zijn sinds de vorige download, plus de ids van plekken die weg zijn. Lukt dat niet (bijvoorbeeld een database zonder die functie), dan haalt hij alsnog de hele stad.
+- **Overpass:** de zoekfunctie vraagt eerst onze eigen server (secrets `OVERPASS_URL` en `OVERPASS_KEY`) en daarna de openbare. Zie [infra/overpass](infra/overpass) voor de installatie op de VPS.
+- **Opruimen:** een anoniem account ontstaat bij de eerste melding. Komt die melding nooit aan, dan blijft er een leeg account over; `delete_idle_anonymous_accounts()` verwijdert die na 30 dagen, elke nacht via pg_cron. Meldt zo'n telefoon later toch iets, dan maakt de app een nieuw account.
+- **Seeding:** bezoeken uit de checklist gaan via `seed_reports()` de database in als meldingen van één seed-account, met de tijd van het bezoek. Gebruikers kunnen niet als dat account melden.
 - **applicationId:** `nl.beandesk.app`. Wil je een ander, verander het dan vóór de eerste release in de Play Store.
 
 ## Nog te doen voor de MVP
@@ -159,15 +165,15 @@ node --test supabase/functions/search/search.test.ts
 - [x] Eigen locatie: permissie alleen tijdens gebruik (ook globaal), blauwe stip, sorteren op afstand
 - [x] Snel melden: anoniem inloggen (supabase-kt) en het meldscherm
 - [x] Supabase-project met de zaken van Utrecht en een wekelijkse import
-- [ ] Delta-sync: alleen gewijzigde zaken ophalen in plaats van de hele export
+- [x] Delta-sync: alleen gewijzigde zaken ophalen in plaats van de hele export
 - [x] Detailpagina met openingstijden per dag
 - [x] Zoeken op naam, plaats, adres of postcode, met opslag van nieuwe gebieden in de database
-- [ ] Overpass: de openbare servers zitten vaak vol. Bij veel gebruikers een eigen Overpass-instantie of een betaalde dienst
-- [ ] Tegelprovider kiezen en de kaartstijl instellen
-- [ ] CAPTCHA (hCaptcha of Turnstile) bij anoniem inloggen, vóór de launch; tijdens het testen staat CAPTCHA-bescherming in Supabase uit
-- [ ] Opruimen van oude anonieme accounts zonder meldingen
+- [x] Overpass: eigen server met alleen Nederland, klaar om op de VPS te zetten ([infra/overpass](infra/overpass)); daarna `OVERPASS_URL` en `OVERPASS_KEY` als secrets zetten
+- [x] Tegelprovider kiezen en de kaartstijl instellen: OpenFreeMap, licht en donker, met VersaTiles als reserve
+- [ ] CAPTCHA bij anoniem inloggen: uitgesteld, want de backend gaat van Supabase naar de eigen VPS; daar opnieuw bekijken
+- [x] Opruimen van oude anonieme accounts zonder meldingen
 - [x] Privacyverklaring en "account verwijderen" in de app (laat de privacyverklaring vóór de launch nog nakijken en zet er een contactadres in)
-- [ ] Seeding: 30-50 zaken in een of twee buurten
+- [ ] Seeding: 30-50 zaken in een of twee buurten. De checklist voor Amsterdam Binnenstad en het importcommando staan klaar ([docs/seeding](docs/seeding)); de bezoeken zelf nog doen
 
 ## Ideeën voor later
 

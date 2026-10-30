@@ -3,7 +3,9 @@ package nl.beandesk.app.data.remote
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.postgrest.exception.PostgrestRestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -29,12 +31,30 @@ class SupabaseBackend(url: String, anonKey: String) {
 
     suspend fun sendReport(report: Report) {
         signInIfNeeded()
+        try {
+            insert(report)
+        } catch (e: RestException) {
+            // An account that never reported anything goes after 30 days
+            // (delete_idle_anonymous_accounts), while the phone still has its session. Then this
+            // report starts a new account.
+            if (!e.isGoneAccount()) throw e
+            client.auth.clearSession()
+            client.auth.signInAnonymously()
+            insert(report)
+        }
+    }
+
+    private suspend fun insert(report: Report) {
         if (report.hasFacts) client.from("place_reports").insert(ReportRow.from(report))
         // One rating per user per place: a new one replaces the old.
         report.stars?.let { stars ->
             client.from("place_ratings").upsert(RatingRow(report.placeId, stars)) { onConflict = "place_id,user_id" }
         }
     }
+
+    /** The session's user no longer exists: its token is refused, or the user id refers to nothing. */
+    private fun RestException.isGoneAccount(): Boolean =
+        statusCode == 401 || (this is PostgrestRestException && code == FOREIGN_KEY_VIOLATION)
 
     /** The first report creates an anonymous account; supabase-kt keeps its session on the phone. */
     private suspend fun signInIfNeeded() {
@@ -79,6 +99,8 @@ class SupabaseBackend(url: String, anonKey: String) {
         client.auth.clearSession()
     }
 }
+
+private const val FOREIGN_KEY_VIOLATION = "23503"
 
 /** Something the user sent: facts about a place, or stars ([Report.stars]), at [at]. */
 data class Contribution(val placeName: String?, val at: Instant, val report: Report)

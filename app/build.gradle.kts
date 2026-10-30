@@ -27,6 +27,9 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"${beanDeskProperty("supabaseUrl").trimEnd('/')}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${beanDeskProperty("supabaseAnonKey")}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${beanDeskProperty("mapStyleUrl")}\"")
+        buildConfigField("String", "MAP_STYLE_DARK_URL", "\"${beanDeskProperty("mapStyleDarkUrl")}\"")
+        buildConfigField("String", "MAP_FALLBACK_STYLE_URL", "\"${beanDeskProperty("mapFallbackStyleUrl")}\"")
+        buildConfigField("String", "MAP_FALLBACK_STYLE_DARK_URL", "\"${beanDeskProperty("mapFallbackStyleDarkUrl")}\"")
         buildConfigField("String", "DEFAULT_CITY", "\"${beanDeskProperty("defaultCity")}\"")
 
         // UI tests on an emulator (src/androidTest), run in CI.

@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -671,3 +672,129 @@ def test_only_a_signed_in_user_can_delete_an_account_and_only_their_own(conn):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         as_user(conn, create_user(conn))
         conn.execute("select public.recompute_place_community(1)")
+
+
+# --- Changes since the last download, idle accounts, seeding --------------------------------
+
+def generated_at(conn) -> str:
+    """An export's generated_at a while ago, past the five minutes of overlap."""
+    return conn.execute("select now() - interval '10 minutes'").fetchone()[0]
+
+
+def age_everything(conn):
+    """Makes every row look ten minutes older than the last download, so nothing counts as changed."""
+    conn.execute("update public.places set updated_at = now() - interval '1 hour'")
+    conn.execute("update public.place_community set updated_at = now() - interval '1 hour'")
+    conn.execute("update public.place_rating_summary set updated_at = now() - interval '1 hour'")
+
+
+def test_changes_hold_only_what_changed_since_the_last_download(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    reported, rated = place_id(conn, 1001), place_id(conn, 2002)
+    age_everything(conn)
+    since = generated_at(conn)
+
+    unchanged = db.city_changes(conn, "utrecht", since)
+    assert unchanged["places"] == [] and unchanged["removed"] == []
+
+    report_as(conn, create_user(conn), reported, wifi="fast")
+    rate_as(conn, create_user(conn), rated, 5)
+    conn.execute("update public.places set deleted_at = now(), updated_at = now() where osm_id = 3003")
+    conn.execute("update public.places set hidden = true where osm_id = 8008")
+
+    changes = db.city_changes(conn, "utrecht", since)
+    assert {p["osm_id"] for p in changes["places"]} == {1001, 2002}
+    assert sorted(changes["removed"]) == sorted([place_id(conn, 3003), place_id(conn, 8008)])
+    changed = {p["osm_id"]: p for p in changes["places"]}
+    assert changed[1001]["community"]["wifi"] == "fast"
+    assert changed[2002]["rating"] == {"average": 5.0, "count": 1}
+    # Same format as the full export, plus what it is relative to.
+    full = db.city_export(conn, "utrecht")
+    assert changed[1001] == next(p for p in full["places"] if p["osm_id"] == 1001)
+    assert changes["since"] is not None and changes["generated_at"] is not None
+
+
+def test_a_place_whose_last_report_went_counts_as_changed(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    user = create_user(conn)
+    report_as(conn, user, cafe, wifi="fast")
+    age_everything(conn)
+    since = generated_at(conn)
+
+    conn.execute("delete from public.place_reports where user_id = %s", (user,))
+
+    changed = {p["osm_id"]: p for p in db.city_changes(conn, "utrecht", since)["places"]}
+    assert changed[1001]["community"] is None
+
+
+def test_anyone_may_read_the_changes(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    since = generated_at(conn)
+    with conn.transaction():
+        conn.execute("set local role anon")
+        assert len(db.city_changes(conn, "utrecht", since)["places"]) == 4
+    assert db.city_changes(conn, "atlantis", since) is None
+
+
+def test_idle_anonymous_accounts_go_after_thirty_days(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    idle, recent, reporter, rater = (create_user(conn) for _ in range(4))
+    person = create_user(conn, anonymous=False)
+    conn.execute(
+        "update auth.users set created_at = now() - interval '31 days' where id = any(%s)",
+        ([idle, reporter, rater, person],),
+    )
+    report_as(conn, reporter, cafe, wifi="fast")
+    rate_as(conn, rater, cafe, 4)
+
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        assert conn.execute("select public.delete_idle_anonymous_accounts()").fetchone()[0] == 1
+
+    left = {r[0] for r in conn.execute("select id from auth.users").fetchall()}
+    assert idle not in left
+    assert {recent, reporter, rater, person} <= left
+
+
+def test_users_cannot_delete_other_accounts(conn):
+    for role in ("anon", "authenticated"):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+            conn.execute(f"set local role {role}")
+            conn.execute("select public.delete_idle_anonymous_accounts('0 seconds')")
+
+
+def test_seed_reports_count_at_the_time_of_the_visit(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    morning, afternoon = (conn.execute(f"select {dutch(at)}").fetchone()[0] for at in ("1 day 10:30", "1 day 15:00"))
+    # More than a person may report in a day, all in one batch.
+    rows = [
+        {"place_id": cafe, "visited_at": morning.isoformat(), "wifi": "fast", "power": "many", "quiet": True},
+        *({"place_id": cafe, "visited_at": afternoon.isoformat(), "quiet": False} for _ in range(70)),
+    ]
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        assert db.seed_reports(conn, rows) == 71
+
+    community = next(p for p in db.city_export(conn, "utrecht")["places"] if p["osm_id"] == 1001)["community"]
+    assert community["wifi"] == "fast"
+    assert community["power"] == "many"
+    assert community["quiet"] is False
+    assert datetime.fromisoformat(community["last_report_at"]) == afternoon
+    assert community["quiet_by_daypart"] == {"morning": {"quiet": 1, "busy": 0}, "afternoon": {"quiet": 0, "busy": 70}}
+
+
+def test_users_cannot_seed_or_report_as_the_seed_account(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute("set local role authenticated")
+        db.seed_reports(conn, [{"place_id": cafe, "visited_at": "2026-10-27T10:30:00+01:00", "wifi": "fast"}])
+
+    user = create_user(conn)
+    seeder = conn.execute("select public.seed_account_id()").fetchone()[0]
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        as_user(conn, user)
+        conn.execute("insert into public.place_reports (place_id, user_id, wifi) values (%s, %s, 'fast')", (cafe, seeder))
