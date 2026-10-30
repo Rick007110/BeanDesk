@@ -13,16 +13,13 @@ data class SearchResult(val export: CityExport, val byName: Boolean)
 interface AreaSearchSource {
     /** Throws [SearchException] when nothing comes of it. */
     suspend fun search(query: String): SearchResult
-
-    /** Asks for the surroundings of a reported place to be fetched from OpenStreetMap again. */
-    suspend fun refreshAround(placeId: Long)
 }
 
 enum class SearchFailure {
     // No place by that name, and no town or address.
     NOT_FOUND,
 
-    // OpenStreetMap could not be reached or is busy, and the area is not known yet.
+    // The address lookup (PDOK) could not be reached, and no place has that name.
     UNAVAILABLE,
 
     // Network trouble or anything else.
@@ -37,6 +34,4 @@ class SearchException(val reason: SearchFailure, cause: Throwable? = null) : Exc
 /** With sample data there is no backend, so only the list itself can be searched. */
 object NoAreaSearch : AreaSearchSource {
     override suspend fun search(query: String): SearchResult = throw SearchException(SearchFailure.NOT_SUPPORTED)
-
-    override suspend fun refreshAround(placeId: Long) = Unit
 }

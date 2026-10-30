@@ -121,17 +121,6 @@ def test_unknown_city_is_refused(conn, overpass_elements):
         db.import_elements(conn, "atlantis", overpass_elements)
 
 
-def test_overpass_query(conn):
-    query = conn.execute("select public.overpass_query('utrecht')").fetchone()[0]
-    assert '["admin_level"="8"]["name"="Utrecht"]' in query
-    assert 'nwr["amenity"~"^(cafe|library|coworking_space)$"](area.city);' in query
-    assert query.endswith("out center tags;")
-
-    conn.execute("insert into public.cities (slug, name) values ('den-bosch', 'Den \"Bosch\"')")
-    quoted = conn.execute("select public.overpass_query('den-bosch')").fetchone()[0]
-    assert '["name"="Den \\"Bosch\\""]' in quoted
-
-
 def test_users_cannot_run_imports(conn, overpass_elements):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         conn.execute("set local role anon")
@@ -277,11 +266,8 @@ def import_area(conn, cells, elements) -> dict:
     ).fetchone()[0]
 
 
-def missing_cells(conn, lat=52.09, lng=5.12, radius=2000, max_age="30 days") -> set[tuple[int, int]]:
-    rows = conn.execute(
-        "select lat_index, lng_index from public.missing_osm_cells(%s, %s, %s, %s::interval)", (lat, lng, radius, max_age)
-    ).fetchall()
-    return {(r[0], r[1]) for r in rows}
+def imported_cells(conn) -> set[tuple[int, int]]:
+    return {(r[0], r[1]) for r in conn.execute("select lat_index, lng_index from public.osm_cells").fetchall()}
 
 
 def area_export(conn, lat=52.0911, lng=5.1201, radius=2000, label="Utrecht") -> dict:
@@ -290,28 +276,28 @@ def area_export(conn, lat=52.0911, lng=5.1201, radius=2000, label="Utrecht") -> 
     ).fetchone()[0]
 
 
-def test_missing_cells_cover_the_radius_and_skip_fresh_ones(conn):
-    before = missing_cells(conn)
-    # 2 km around (52.09, 5.12): 3 rows of cells (0.02° lat) by 3 columns (0.03° lng).
-    assert len(before) == 9
-    assert (2604, 170) in before
-
-    conn.execute("insert into public.osm_cells (lat_index, lng_index) values (2604, 170)")
-    conn.execute("insert into public.osm_cells (lat_index, lng_index, fetched_at) values (2604, 171, now() - interval '40 days')")
-    after = missing_cells(conn)
-    assert (2604, 170) not in after
-    # Older than 30 days counts as missing again.
-    assert (2604, 171) in after
-    assert len(after) == 8
-
-
 def test_area_import_adds_places_without_a_city_and_marks_cells(conn, overpass_elements):
     result = import_area(conn, FIXTURE_CELLS, overpass_elements)
     assert (result["inserted"], result["updated"], result["deleted"]) == (4, 0, 0)
 
     cities = conn.execute("select distinct city from public.places").fetchall()
     assert cities == [(None,)]
-    assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+    assert imported_cells(conn) == {(2604, 170), (2604, 171)}
+
+
+def test_the_municipality_from_the_extract_is_the_city(conn, overpass_elements):
+    in_utrecht = [{**e, "gemeente": "Utrecht"} for e in overpass_elements if e["id"] != 3003]
+    elsewhere = [{**e, "gemeente": "Stichtse Vecht"} for e in overpass_elements if e["id"] == 3003]
+    import_area(conn, FIXTURE_CELLS, in_utrecht + elsewhere)
+    cities = {r[0]: r[1] for r in conn.execute("select osm_id, city from public.places").fetchall()}
+    assert cities == {1001: "utrecht", 2002: "utrecht", 8008: "utrecht", 3003: None}
+    assert {p["osm_id"] for p in db.city_export(conn, "utrecht")["places"]} == {1001, 2002, 8008}
+
+    # Unchanged on the next import, so it does not count as a change for the app.
+    conn.execute("update public.places set updated_at = now() - interval '1 hour'")
+    import_area(conn, FIXTURE_CELLS, in_utrecht + elsewhere)
+    changed = conn.execute("select count(*) from public.places where updated_at > now() - interval '1 minute'").fetchone()[0]
+    assert changed == 0
 
 
 def test_area_import_keeps_the_city_of_known_places(conn, overpass_elements):
@@ -362,27 +348,15 @@ def test_area_export_writes_places_exactly_like_the_city_export(conn, overpass_e
     assert by_area == by_city
 
 
-def test_place_location(conn, overpass_elements):
-    db.import_elements(conn, "utrecht", overpass_elements)
-    library = place_id(conn, 2002)
-    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() == pytest.approx((52.0927, 5.1196))
-
-    conn.execute("update public.places set deleted_at = now() where id = %s", (library,))
-    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() is None
-
-
 def test_the_search_function_role_can_do_its_work(conn, overpass_elements):
     with conn.transaction():
         conn.execute("set local role service_role")
         import_area(conn, FIXTURE_CELLS, overpass_elements)
-        conn.execute("insert into public.osm_fetches (cells, elements) values (2, 8)")
         conn.execute(
             "insert into public.geocode_cache (query, label, kind, lat, lng) values ('utrecht', 'Utrecht', 'woonplaats', 52.09, 5.12)"
             " on conflict (query) do update set label = excluded.label"
         )
-        assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
         assert len(area_export(conn)["places"]) == 4
-        assert conn.execute("select * from public.place_location(%s)", (place_id(conn, 1001),)).fetchone() is not None
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])
@@ -390,9 +364,7 @@ def test_the_search_function_role_can_do_its_work(conn, overpass_elements):
     "statement",
     [
         "select public.area_export(52.09, 5.12, 1000, 'x')",
-        "select * from public.missing_osm_cells(52.09, 5.12, 1000)",
         "select public.import_osm_area('[]', '[]')",
-        "select * from public.place_location(1)",
         "select * from public.geocode_cache",
         "insert into public.osm_cells (lat_index, lng_index) values (1, 1)",
     ],
@@ -414,7 +386,7 @@ def test_extract_import_adds_places_and_marks_its_cells(conn, overpass_elements)
     result = conn.execute("select public.import_osm_extract(%s)", (psycopg.types.json.Jsonb(data),)).fetchone()[0]
 
     assert (result["cells"], result["inserted"], result["generated_at"]) == (2, 4, "2026-11-01T02:30:00+00:00")
-    assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+    assert imported_cells(conn) == {(2604, 170), (2604, 171)}
     assert len(area_export(conn)["places"]) == 4
 
 

@@ -214,7 +214,5 @@ class PlacesScreenTest {
             val sample = SampleCityExportSource(context.assets).fetch("utrecht")
             return SearchResult(sample.copy(city = "Amersfoort", places = sample.places.take(2)), byName = false)
         }
-
-        override suspend fun refreshAround(placeId: Long) = Unit
     }
 }

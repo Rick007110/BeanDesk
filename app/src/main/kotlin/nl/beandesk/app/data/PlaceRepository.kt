@@ -169,20 +169,6 @@ class PlaceRepository(
         }
     }
 
-    /**
-     * After a report, someone has just looked at the place: a good moment for the backend to
-     * pick up changes in OpenStreetMap around it. Best effort; it can take a while.
-     */
-    suspend fun refreshAround(placeId: Long) {
-        try {
-            searchSource.refreshAround(placeId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.i(TAG, "Refreshing around place $placeId failed", e)
-        }
-    }
-
     private suspend fun setCommunity(id: Long, facts: CommunityFacts) = dao.setCommunity(
         id = id,
         wifi = facts.wifi?.name,

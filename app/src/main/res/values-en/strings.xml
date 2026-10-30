@@ -113,7 +113,7 @@
     <string name="search_hint_list_only">Search by name or address</string>
     <string name="search_clear">Clear search</string>
     <string name="search_back_home">Back to %1$s</string>
-    <string name="search_unavailable">OpenStreetMap is busy right now. Try again in a few minutes.</string>
+    <string name="search_unavailable">Searching by town or address does not work right now. Try again in a few minutes.</string>
     <string name="search_failed">Search failed. Check your internet connection and try again.</string>
 
     <string name="location_prompt_title">Places near you</string>

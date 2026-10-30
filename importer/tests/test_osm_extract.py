@@ -25,6 +25,16 @@ def test_keeps_laptop_spots_with_one_coordinate_each(data):
     assert by_id[("way", 100)]["tags"] == {"amenity": "library", "name": "Bieb in een gebouw", "building": "yes"}
 
 
+def test_places_get_the_municipality_they_lie_in(data):
+    by_id = {(e["type"], e["id"]): e for e in data["elements"]}
+    assert by_id[("node", 1)]["gemeente"] == "Utrecht"
+    assert by_id[("way", 100)]["gemeente"] == "Utrecht"
+    # Outside the municipality; the province (admin_level 4) does not count.
+    assert "gemeente" not in by_id[("relation", 300)]
+    # Boundaries are no places.
+    assert ("relation", 500) not in by_id
+
+
 def test_cells_cover_the_boundary(data):
     cells = {tuple(c) for c in data["cells"]}
     # 52.00-52.15 N is lat_index 2600-2607, 5.0-5.2 E is lng_index 166-173.

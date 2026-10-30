@@ -1,13 +1,14 @@
 name: OpenStreetMap-data Nederland
 
 # Builds nl-places.json from the Geofabrik extract of the Netherlands: every cafe, library and
-# coworking space, plus the search cells the extract covers (importer/beandesk_import/osm_extract.py).
-# It replaces the file under the release "osm-nl"; the database imports it with import_osm_file(),
-# monthly via pg_cron (supabase/migrations/*_import_osm_file.sql).
+# coworking space with the municipality it lies in, plus the grid cells the extract covers
+# (importer/beandesk_import/osm_extract.py). It replaces the file under the release "osm-nl"; the
+# database imports it with import_osm_file() every night via pg_cron
+# (supabase/migrations/*_daily_import_without_overpass.sql).
 on:
   schedule:
-    # Geofabrik updates daily; the database imports at 05:23 on the 1st.
-    - cron: "23 2 1 * *"
+    # Geofabrik updates daily, around midnight; the database imports at 05:23.
+    - cron: "23 2 * * *"
   workflow_dispatch:
   push:
     paths:
@@ -41,11 +42,11 @@ jobs:
           curl -fsSL -o netherlands.poly https://download.geofabrik.de/europe/netherlands.poly
           ls -lh netherlands.osm.pbf
 
-      # First down to the wanted objects plus the nodes and ways they need, so reading node
-      # locations stays small instead of indexing all of the Netherlands.
+      # First down to the wanted objects and the municipal boundaries, plus the nodes and ways they
+      # need, so reading node locations stays small instead of indexing all of the Netherlands.
       - name: Filteren en omzetten
         run: |
-          osmium tags-filter netherlands.osm.pbf nwr/amenity=cafe,library,coworking_space -o wanted.osm.pbf
+          osmium tags-filter netherlands.osm.pbf nwr/amenity=cafe,library,coworking_space r/boundary=administrative -o wanted.osm.pbf
           ls -lh wanted.osm.pbf
           python -m beandesk_import.osm_extract wanted.osm.pbf netherlands.poly --out nl-places.json --source "Geofabrik netherlands-latest.osm.pbf"
 
@@ -53,6 +54,6 @@ jobs:
         run: |
           if ! gh release view osm-nl >/dev/null 2>&1; then
             gh release create osm-nl --prerelease --title "OpenStreetMap-data Nederland" \
-              --notes "Wordt maandelijks vernieuwd door de workflow osm-data.yml en door de database ingeladen met import_osm_file(). Geen app-release. © OpenStreetMap-bijdragers, ODbL."
+              --notes "Wordt elke nacht vernieuwd door de workflow osm-data.yml en door de database ingeladen met import_osm_file(). Geen app-release. © OpenStreetMap-bijdragers, ODbL."
           fi
           gh release upload osm-nl nl-places.json --clobber

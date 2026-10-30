@@ -4,8 +4,10 @@ The output has the shape of an Overpass answer, so the same import rules apply (
 
     {"generated_at": "...", "source": "...", "cells": [[lat_index, lng_index], ...], "elements": [...]}
 
-"cells" are the search cells (0.02° by 0.03°, see missing_osm_cells()) that touch the area of the
-extract: after the import they count as fetched, so a search there no longer asks Overpass.
+"cells" are the grid cells (0.02° by 0.03°) that touch the area of the extract: places in them that
+the extract no longer has are closed by the import. Each element also gets "gemeente", the
+municipality it lies in (an administrative boundary with admin_level 8 in the extract), which the
+import uses as the place's city.
 
 Needs pyosmium and shapely: pip install -e '.[extract]'
 """
@@ -17,7 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import osmium
-from shapely.geometry import Polygon, box
+from shapely import STRtree
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 from shapely.prepared import prep
 
@@ -34,11 +37,13 @@ def mean_point(points: list[tuple[float, float]]) -> tuple[float, float]:
 
 
 class Collector(osmium.SimpleHandler):
-    """Collects every cafe, library and coworking space with one coordinate each."""
+    """Collects every cafe, library and coworking space with one coordinate each, and the
+    municipalities."""
 
     def __init__(self) -> None:
         super().__init__()
         self.elements: list[dict] = []
+        self.municipalities: list[tuple[str, object]] = []
 
     @staticmethod
     def _wanted(tags) -> bool:
@@ -62,8 +67,13 @@ class Collector(osmium.SimpleHandler):
             self._add("way", w.id, *mean_point(points), w.tags)
 
     def area(self, a) -> None:
-        # Ways are handled above; areas also come from multipolygon relations.
-        if a.from_way() or not self._wanted(a.tags):
+        # Ways are handled above; areas also come from multipolygon and boundary relations.
+        if a.from_way():
+            return
+        if a.tags.get("boundary") == "administrative" and a.tags.get("admin_level") == "8" and a.tags.get("name"):
+            self._add_municipality(a)
+            return
+        if not self._wanted(a.tags):
             return
         points = []
         for ring in a.outer_rings():
@@ -71,6 +81,28 @@ class Collector(osmium.SimpleHandler):
             points += [(nd.lat, nd.lon) for nd in ring if nd.location.valid()][:-1]
         if points:
             self._add("relation", a.orig_id(), *mean_point(points), a.tags)
+
+
+    def _add_municipality(self, a) -> None:
+        polygons = []
+        for outer in a.outer_rings():
+            shell = [(nd.lon, nd.lat) for nd in outer if nd.location.valid()]
+            holes = [[(nd.lon, nd.lat) for nd in inner if nd.location.valid()] for inner in a.inner_rings(outer)]
+            if len(shell) >= 4:
+                polygons.append(Polygon(shell, [hole for hole in holes if len(hole) >= 4]))
+        if polygons:
+            self.municipalities.append((a.tags["name"], unary_union(polygons)))
+
+
+def assign_municipalities(elements: list[dict], municipalities: list[tuple[str, object]]) -> None:
+    """Gives every element inside a municipality its name as "gemeente"."""
+    if not municipalities:
+        return
+    tree = STRtree([shape for _, shape in municipalities])
+    for element in elements:
+        hits = tree.query(Point(element["lon"], element["lat"]), predicate="intersects")
+        if len(hits) > 0:
+            element["gemeente"] = municipalities[int(hits[0])][0]
 
 
 def read_poly(path: Path):
@@ -110,6 +142,7 @@ def extract(pbf: Path, poly: Path, source: str) -> dict:
     collector = Collector()
     # Locations for way nodes; areas for multipolygon relations.
     collector.apply_file(str(pbf), locations=True)
+    assign_municipalities(collector.elements, collector.municipalities)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": source,

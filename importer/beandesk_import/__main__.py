@@ -1,7 +1,6 @@
 """Command line entry point. Needs DATABASE_URL.
 
-    python -m beandesk_import import utrecht
-    python -m beandesk_import import utrecht --overpass-file saved-response.json
+    python -m beandesk_import import-extract nl-places.json
     python -m beandesk_import export utrecht --out-dir out
     python -m beandesk_import seed-checklist amsterdam-binnenstad --out docs/seeding/amsterdam-binnenstad.csv
     python -m beandesk_import seed-import docs/seeding/amsterdam-binnenstad.csv --dry-run
@@ -25,13 +24,10 @@ def _connect() -> psycopg.Connection:
     return psycopg.connect(url)
 
 
-def run_import(args: argparse.Namespace) -> None:
+def run_import_extract(args: argparse.Namespace) -> None:
+    data = json.loads(Path(args.file).read_text())
     with _connect() as conn:
-        if args.overpass_file:
-            elements = json.loads(Path(args.overpass_file).read_text())["elements"]
-            result = db.import_elements(conn, args.city, elements, force=args.force)
-        else:
-            result = db.import_city(conn, args.city, force=args.force)
+        result = db.import_extract(conn, data)
     print(json.dumps(result, indent=2))
 
 
@@ -71,11 +67,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="beandesk_import")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    imp = commands.add_parser("import", help="Import a city from OpenStreetMap into the database")
-    imp.add_argument("city")
-    imp.add_argument("--overpass-file", help="Use a saved Overpass JSON response instead of the API")
-    imp.add_argument("--force", action="store_true", help="Also when far fewer places come back than before")
-    imp.set_defaults(func=run_import)
+    imp = commands.add_parser(
+        "import-extract",
+        help="Import a file made by osm_extract.py (nl-places.json), as the database does every night",
+    )
+    imp.add_argument("file")
+    imp.set_defaults(func=run_import_extract)
 
     exp = commands.add_parser("export", help="Write the city export the app downloads to a file")
     exp.add_argument("city")

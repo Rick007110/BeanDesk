@@ -43,16 +43,12 @@ class AreaSearchClient(
         return SearchResult(CityExportParser.parse(body), byName = kind == "naam")
     }
 
-    override suspend fun refreshAround(placeId: Long) {
-        post(buildJsonObject { put("refresh_place_id", JsonPrimitive(placeId)) }.toString())
-    }
-
     private suspend fun post(json: String): String =
         http.post(url) {
-            // The first search of an area waits for OpenStreetMap, which can take a while.
+            // A lookup at PDOK and a database query: seconds, but give a slow network some room.
             timeout {
-                requestTimeoutMillis = 60_000
-                socketTimeoutMillis = 60_000
+                requestTimeoutMillis = 20_000
+                socketTimeoutMillis = 20_000
             }
             header("apikey", anonKey)
             header(HttpHeaders.Authorization, "Bearer $anonKey")
@@ -62,7 +58,7 @@ class AreaSearchClient(
 
     private fun HttpStatusCode.toFailure(): SearchFailure = when (this) {
         HttpStatusCode.NotFound -> SearchFailure.NOT_FOUND
-        // 429: everyone together asked OpenStreetMap too much; 502: it could not be reached.
+        // 502: the address lookup (PDOK) could not be reached.
         HttpStatusCode.TooManyRequests, HttpStatusCode.BadGateway -> SearchFailure.UNAVAILABLE
         else -> SearchFailure.FAILED
     }
