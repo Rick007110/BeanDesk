@@ -3,12 +3,13 @@ package nl.beandesk.app.ui.places
 import android.content.Context
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -82,7 +83,7 @@ class PlacesScreenTest {
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("1 van 11 plekken").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Koffiehuis Science Park").assertExists()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Koffiehuis Science Park"))
     }
 
     @Test
@@ -96,8 +97,10 @@ class PlacesScreenTest {
         // The list switches to the two places of the fake search, the field empties and "Amersfoort"
         // shows as the area.
         compose.waitUntil(10_000) { compose.onAllNodesWithText("2 plekken").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Koffie & Werk").assertExists()
-        compose.onNodeWithText("Stadsbibliotheek Centrum").assertExists()
+        // On a small screen the second card is below the fold: scroll to each to check it is listed.
+        val list = compose.onNode(hasScrollToNodeAction())
+        list.performScrollToNode(hasText("Koffie & Werk"))
+        list.performScrollToNode(hasText("Stadsbibliotheek Centrum"))
         compose.onAllNodes(hasSetTextAction() and hasText("Amersfoort")).assertCountEquals(0)
         assertEquals(true, compose.onAllNodesWithText("Amersfoort").fetchSemanticsNodes().isNotEmpty())
         assertEquals(listOf("Amersfoort"), search.queries)
