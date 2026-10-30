@@ -183,7 +183,7 @@ class PlacesViewModel(
         }
     }
 
-    fun setSearchText(text: String) {
+    fun onSearchTextChange(text: String) {
         searchText = text
     }
 

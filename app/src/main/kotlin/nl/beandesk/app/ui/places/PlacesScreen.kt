@@ -116,7 +116,7 @@ fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
         onToggleList = viewModel::toggleList,
         onRetry = viewModel::refresh,
         onReport = viewModel::report,
-        onSearchTextChange = viewModel::setSearchText,
+        onSearchTextChange = viewModel::onSearchTextChange,
         onSearchArea = viewModel::searchArea,
         onShowHomeArea = viewModel::showHomeArea,
     )
