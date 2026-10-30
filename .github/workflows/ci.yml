@@ -84,7 +84,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install -e '.[test]'
+      - run: pip install -e '.[test,extract]'
       - name: Tests, ook tegen de Supabase-migraties
         run: pytest -q
         env:
