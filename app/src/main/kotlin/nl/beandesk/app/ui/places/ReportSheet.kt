@@ -16,14 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +44,6 @@ import nl.beandesk.core.model.WifiStatus
  * "Klopt dit nog?": a few taps on what the user sees now. Starts filled in with what is known,
  * so sending it unchanged confirms it. Takes well under ten seconds.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportSheet(
     place: Place,
@@ -73,12 +69,7 @@ fun ReportSheet(
     var stars by rememberSaveable(place.id) { mutableStateOf<Int?>(null) }
     val report = Report(place.id, wifi, power, quiet, laptop, closed, stars)
 
-    // Opens all the way, so every question and the send button show at once: half open, the
-    // lower questions and the button were below the edge of the screen.
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    BottomSheet(onDismissRequest = onDismiss) {
         // On a small screen the questions scroll; the send button stays in view below them.
         Column(
             modifier = Modifier

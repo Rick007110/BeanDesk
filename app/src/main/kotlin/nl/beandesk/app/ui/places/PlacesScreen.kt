@@ -323,25 +323,10 @@ private fun PlacesContent(
         }
     }
 
+    // The report sheet opens over the place's sheet, which stays underneath: closing the report
+    // shows the place again without it sliding in anew.
     val selected = state.selected
-    val reporting = reportPlaceId
-    if (selected != null && reporting == selected.place.id) {
-        ReportSheet(
-            place = selected.place,
-            isSending = state.isSendingReport,
-            sendsReports = state.sendsReports,
-            onSend = { report ->
-                onReport(report) { done ->
-                    // Close both sheets, so the snackbar with the result is visible.
-                    if (done) {
-                        reportPlaceId = null
-                        onSelect(null)
-                    }
-                }
-            },
-            onDismiss = { reportPlaceId = null },
-        )
-    } else if (selected != null) {
+    if (selected != null) {
         PlaceDetailSheet(
             item = selected,
             showMapButton = state.showList,
@@ -350,6 +335,23 @@ private fun PlacesContent(
             onShowOnMap = { onShowOnMap(selected.place.id) },
             onReport = { reportPlaceId = selected.place.id },
         )
+        if (reportPlaceId == selected.place.id) {
+            ReportSheet(
+                place = selected.place,
+                isSending = state.isSendingReport,
+                sendsReports = state.sendsReports,
+                onSend = { report ->
+                    onReport(report) { done ->
+                        // Close both sheets, so the snackbar with the result is visible.
+                        if (done) {
+                            reportPlaceId = null
+                            onSelect(null)
+                        }
+                    }
+                },
+                onDismiss = { reportPlaceId = null },
+            )
+        }
     }
 
     if (showIconSheet) {
