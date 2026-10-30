@@ -74,15 +74,36 @@ class Finger(private val name: String) {
         device.swipe(bounds.centerX(), bounds.centerY(), bounds.centerX(), height - 20, 40)
     }
 
-    /** A finger moving at a steady pace, about 5 ms per step; fractions of the screen height. */
+    /**
+     * A finger moving at a steady pace, about 5 ms per step; fractions of the screen height. Then
+     * waits, as a person does, until the content has stopped moving: a tap on content that still
+     * scrolls only stops it, on any Android list.
+     */
     fun drag(fromY: Float, toY: Float, steps: Int = 40) {
         device.swipe(width / 2, (height * fromY).toInt(), width / 2, (height * toY).toInt(), steps)
+        awaitStill()
     }
 
-    /** A flick, then the moment a person takes before tapping: the content has stopped moving. */
-    fun fling(fromY: Float, toY: Float) {
-        drag(fromY, toY, steps = 6)
-        Thread.sleep(1_000)
+    fun fling(fromY: Float, toY: Float) = drag(fromY, toY, steps = 6)
+
+    /** Waits until nothing on screen moves any more (at most five seconds). */
+    private fun awaitStill() {
+        var before = layout()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(300)
+            val now = layout()
+            if (now == before) return
+            before = now
+        }
+    }
+
+    private fun layout(): List<String> = device.findObjects(By.pkg(packageName)).mapNotNull { node ->
+        try {
+            "${node.text ?: node.contentDescription} ${node.visibleBounds.toShortString()}"
+        } catch (e: StaleObjectException) {
+            null
+        }
     }
 
     fun await(selector: BySelector, timeout: Long = 3_000): UiObject2 =
