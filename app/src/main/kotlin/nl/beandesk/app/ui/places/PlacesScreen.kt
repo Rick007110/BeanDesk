@@ -268,6 +268,7 @@ private fun PlacesContent(
             AnimatedVisibility(state.showList, enter = fadeIn(), exit = fadeOut()) {
                 PlaceList(
                     items = state.items,
+                    areaKey = state.areaKey,
                     totalCount = state.totalCount,
                     isRefreshing = state.isRefreshing,
                     attribution = state.attribution,
