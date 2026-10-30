@@ -1,5 +1,8 @@
 package nl.beandesk.core.model
 
+import java.time.Duration
+import java.time.Instant
+
 enum class Category { CAFE, LIBRARY, COWORKING }
 
 enum class WifiStatus { NONE, YES, SLOW, FAST }
@@ -27,7 +30,18 @@ data class CommunityFacts(
     val quiet: Boolean? = null,
     val laptopPolicy: LaptopPolicy? = null,
     val closedReports: Int = 0,
-)
+    // When a user last reported a fact here; null in exports from before it was sent along.
+    val lastReportAt: Instant? = null,
+    // Quiet and busy reports per part of the day, from the last 12 months.
+    val quietByDaypart: Map<Daypart, QuietCount> = emptyMap(),
+) {
+    /** Whether nobody confirmed anything for a year, so what users said may be outdated. */
+    fun isStale(now: Instant): Boolean = lastReportAt != null && Duration.between(lastReportAt, now) > STALE_AFTER
+
+    companion object {
+        val STALE_AFTER: Duration = Duration.ofDays(365)
+    }
+}
 
 /** Stars from users as a laptop spot: the average of 1 to 5 and how many gave one. */
 data class Rating(val average: Double, val count: Int)

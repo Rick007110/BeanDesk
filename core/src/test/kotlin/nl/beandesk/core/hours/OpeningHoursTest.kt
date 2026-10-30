@@ -2,7 +2,9 @@ package nl.beandesk.core.hours
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class OpeningHoursTest {
     private fun status(hours: String, day: Weekday, time: String): OpenStatus {
@@ -10,6 +12,14 @@ class OpeningHoursTest {
         val parsed = OpeningHours.parse(hours) ?: error("Could not parse '$hours'")
         return parsed.status(WeekTime(day, h * 60 + m))
     }
+
+    /** Monday to Sunday as "08:00-18:00", "" when closed. */
+    private fun week(hours: String): List<String> {
+        val parsed = OpeningHours.parse(hours) ?: error("Could not parse '$hours'")
+        return parsed.week.map { day -> day.spans.joinToString(",") { "${clock(it.start)}-${clock(it.end)}" } }
+    }
+
+    private fun clock(minutes: Int) = "%02d:%02d".format(minutes / 60, minutes % 60)
 
     @Test
     fun `weekday range with closing time`() {
@@ -84,5 +94,38 @@ class OpeningHoursTest {
         assertNull(OpeningHours.parse("sunrise-sunset"))
         assertNull(OpeningHours.parse("Mo-Fr 18:00+"))
         assertNull(OpeningHours.parse("PH off"))
+    }
+
+    @Test
+    fun `the week day by day`() {
+        assertEquals(
+            listOf("08:00-18:00", "08:00-18:00", "08:00-18:00", "08:00-18:00", "08:00-18:00", "09:00-17:00", ""),
+            week("Mo-Fr 08:00-18:00; Sa 09:00-17:00"),
+        )
+        assertEquals(listOf("09:00-12:00,13:00-17:00", "", "", "", "", "", ""), week("Mo 09:00-12:00,13:00-17:00"))
+    }
+
+    @Test
+    fun `a night stays on the day it starts`() {
+        assertEquals(listOf("", "", "", "", "20:00-26:00", "20:00-26:00", ""), week("Fr,Sa 20:00-02:00"))
+    }
+
+    @Test
+    fun `open all day`() {
+        for (hours in listOf("24/7", "Mo-Su 00:00-24:00", "Mo-Su")) {
+            val week = checkNotNull(OpeningHours.parse(hours)).week
+            assertEquals(7, week.size)
+            assertTrue(week.all { it.isAllDay }, hours)
+        }
+        val workdays = checkNotNull(OpeningHours.parse("Mo-Fr 00:00-24:00")).week
+        assertTrue(workdays[Weekday.FR.ordinal].isAllDay)
+        assertTrue(workdays[Weekday.SA.ordinal].isClosed)
+    }
+
+    @Test
+    fun `knows when holidays have their own hours`() {
+        assertTrue(checkNotNull(OpeningHours.parse("Mo-Fr 08:00-18:00; PH off")).mentionsHolidays)
+        assertTrue(checkNotNull(OpeningHours.parse("Mo-Sa 10:00-17:00; SH,Su 12:00-16:00")).mentionsHolidays)
+        assertFalse(checkNotNull(OpeningHours.parse("Mo-Fr 08:00-18:00")).mentionsHolidays)
     }
 }

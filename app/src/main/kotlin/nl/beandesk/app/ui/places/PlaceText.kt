@@ -2,6 +2,7 @@ package nl.beandesk.app.ui.places
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import nl.beandesk.app.R
 import nl.beandesk.app.ui.theme.LocalStatusColors
@@ -40,19 +41,17 @@ val Category.filterLabelRes: Int
         Category.COWORKING -> R.string.category_coworking
     }
 
-private val DUTCH = Locale.forLanguageTag("nl-NL")
-
-/** "350 m" or "1,2 km", with a Dutch decimal comma. */
-fun distanceText(meters: Double): String {
+/** "350 m" or "1,2 km" (in English "1.2 km"). */
+fun distanceText(meters: Double, locale: Locale): String {
     val roundedMeters = (meters / 10).roundToInt() * 10
-    return if (roundedMeters < 1000) "$roundedMeters m" else String.format(DUTCH, "%.1f km", meters / 1000)
+    return if (roundedMeters < 1000) "$roundedMeters m" else String.format(locale, "%.1f km", meters / 1000)
 }
 
 /** "Café · 350 m · Oudegracht 120"; parts that are unknown are left out. */
 @Composable
 fun placeSubtitle(item: PlaceItem): String = listOfNotNull(
     stringResource(item.place.category.labelRes),
-    item.distanceMeters?.let(::distanceText),
+    item.distanceMeters?.let { distanceText(it, LocalConfiguration.current.locales[0]) },
     item.place.address,
 ).joinToString(" · ")
 

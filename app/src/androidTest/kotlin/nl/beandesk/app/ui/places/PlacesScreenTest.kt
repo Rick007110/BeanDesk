@@ -1,6 +1,7 @@
 package nl.beandesk.app.ui.places
 
 import android.content.Context
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -23,6 +25,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.delay
+import nl.beandesk.app.DutchRule
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
 import nl.beandesk.app.data.location.LocationRepository
@@ -42,7 +45,10 @@ import org.junit.runner.RunWith
 /** The places screen on a real device, with the sample places (src/debug/assets) and no network. */
 @RunWith(AndroidJUnit4::class)
 class PlacesScreenTest {
-    @get:Rule
+    @get:Rule(order = 0)
+    val dutch = DutchRule()
+
+    @get:Rule(order = 1)
     val compose = createComposeRule()
 
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -147,6 +153,53 @@ class PlacesScreenTest {
         compose.onNodeWithText("Wat klopt er nu?").assertDoesNotExist()
         compose.onNodeWithText("Melden").assertDoesNotExist()
         list.performScrollToNode(hasContentDescription("4,0 van 5 sterren, 1 beoordelingen"))
+    }
+
+    @Test
+    fun thePlaceShowsItsWeekAndHowBusyItIsPerPartOfTheDay() {
+        showScreen()
+        openPlace("Koffiehuis Science Park")
+
+        // Both routes, by bike and on foot.
+        compose.onNodeWithText("Fietsroute").assertIsDisplayed()
+        compose.onNodeWithText("Looproute").assertIsDisplayed()
+
+        // Mo-Fr 08:00-17:00, closed in the weekend; today stressed.
+        compose.onNodeWithText("Maandag").performScrollTo()
+        compose.onAllNodesWithText("08:00–17:00").assertCountEquals(5)
+        compose.onNode(hasText("Zaterdag") and hasText("Gesloten")).assertExists()
+        compose.onNode(hasText("Zondag") and hasText("Gesloten")).assertExists()
+        compose.onAllNodes(hasStateDescription("vandaag")).assertCountEquals(1)
+
+        // 4 quiet in the morning; 2 quiet and 1 busy in the afternoon; 3 busy in the weekend.
+        compose.onNodeWithText("Drukte per dagdeel").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasText("Ochtend") and hasText("Rustig") and hasText("4 meldingen")).assertExists()
+        compose.onNode(hasText("Middag") and hasText("Rustig") and hasText("3 meldingen")).assertExists()
+        compose.onNode(hasText("Avond") and hasText("Nog geen meldingen")).assertExists()
+        compose.onNode(hasText("Weekend") and hasText("Druk") and hasText("3 meldingen")).assertExists()
+        compose.onAllNodes(hasStateDescription("nu")).assertCountEquals(1)
+        compose.onNodeWithText("Laatst bevestigd door een gebruiker", substring = true).assertExists()
+    }
+
+    @Test
+    fun aPlaceNobodyConfirmedForAYearSaysSo() {
+        showScreen()
+        val list = compose.onNode(hasScrollToNodeAction())
+        list.performScrollToNode(hasText("Werkplaats Lombok"))
+        // Only this sample place had its last report over a year ago.
+        list.performScrollToNode(hasText("Niet recent bevestigd"))
+        compose.onAllNodesWithText("Niet recent bevestigd").assertCountEquals(1)
+
+        openPlace("Werkplaats Lombok")
+        compose.onNodeWithText("Gebruikers meldden hier voor het laatst iets op", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    private fun openPlace(name: String) {
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
+        compose.onNodeWithText(name).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Melden").fetchSemanticsNodes().isNotEmpty() }
     }
 
     /** Answers every search with the first two sample places, labelled "Amersfoort". */

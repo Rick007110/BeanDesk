@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -37,13 +38,14 @@ import java.util.Locale
 /** The amber of rating stars; readable on both the light and the dark theme. */
 val StarColor = Color(0xFFF2A900)
 
-/** "4,3" with a Dutch decimal comma. */
-fun Rating.averageText(): String = String.format(Locale.forLanguageTag("nl-NL"), "%.1f", average)
+/** "4,3" in Dutch, "4.3" in English. */
+fun Rating.averageText(locale: Locale): String = String.format(locale, "%.1f", average)
 
 /** Five stars, filled to the nearest half, plus "4,3 (12)"; "Nog geen sterren" without ratings. */
 @Composable
 fun RatingStars(rating: Rating?, modifier: Modifier = Modifier, starSize: Dp = 16.dp) {
-    val description = rating?.let { stringResource(R.string.rating_description, it.averageText(), it.count) }
+    val locale = LocalConfiguration.current.locales[0]
+    val description = rating?.let { stringResource(R.string.rating_description, it.averageText(locale), it.count) }
         ?: stringResource(R.string.rating_none)
     // A new rating, after a report or a refresh, fades in over the old one.
     Crossfade(rating, modifier = modifier.clearAndSetSemantics { contentDescription = description }, label = "rating") { shown ->
@@ -63,7 +65,7 @@ fun RatingStars(rating: Rating?, modifier: Modifier = Modifier, starSize: Dp = 1
                 )
             }
             Text(
-                text = shown?.let { stringResource(R.string.rating_summary, it.averageText(), it.count) }
+                text = shown?.let { stringResource(R.string.rating_summary, it.averageText(locale), it.count) }
                     ?: stringResource(R.string.rating_none),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

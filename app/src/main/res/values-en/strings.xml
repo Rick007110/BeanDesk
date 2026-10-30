@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="places_title">Workspots</string>
+
+    <string name="show_list">List</string>
+    <string name="show_map">Map</string>
+
+    <plurals name="places_count">
+        <item quantity="one">%d place</item>
+        <item quantity="other">%d places</item>
+    </plurals>
+    <plurals name="places_count_filtered">
+        <item quantity="one">%1$d of %2$d place</item>
+        <item quantity="other">%1$d of %2$d places</item>
+    </plurals>
+
+    <string name="filter_open_now">Open now</string>
+    <string name="filter_wifi">Wi-Fi</string>
+    <string name="filter_power">Power outlets</string>
+    <string name="filter_laptop">Laptops OK</string>
+    <string name="filter_quiet">Quiet</string>
+
+    <string name="category_cafe">Cafés</string>
+    <string name="category_library">Libraries</string>
+    <string name="category_coworking">Coworking</string>
+    <string name="category_cafe_one">Café</string>
+    <string name="category_library_one">Library</string>
+    <string name="category_coworking_one">Coworking</string>
+
+    <string name="status_open_closes_in">Open now · closes in %1$s</string>
+    <string name="status_always_open">Always open</string>
+    <string name="status_closed_opens_in">Closed · opens in %1$s</string>
+    <string name="status_closed">Closed</string>
+    <string name="status_unknown">Opening hours unknown</string>
+
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
+    <string name="duration_more_than_a_day">over a day</string>
+
+    <string name="chip_wifi">Wi-Fi</string>
+    <string name="chip_wifi_fast">Fast Wi-Fi</string>
+    <string name="chip_wifi_slow">Slow Wi-Fi</string>
+    <string name="chip_power">Power outlets</string>
+    <string name="chip_power_many">Plenty of outlets</string>
+    <string name="chip_laptop_ok">Laptops welcome</string>
+    <string name="chip_laptop_weekdays">Laptops on weekdays</string>
+    <string name="chip_laptop_no">No laptops</string>
+    <string name="chip_quiet">Quiet</string>
+    <string name="no_reports_yet">Nothing known yet about Wi-Fi and outlets</string>
+
+    <string name="fact_label_wifi">Wi-Fi</string>
+    <string name="fact_label_power">Power outlets</string>
+    <string name="fact_label_laptop">Laptop</string>
+    <string name="fact_label_quiet">Crowds</string>
+    <string name="fact_label_hours">Opening hours</string>
+    <string name="fact_yes">Yes</string>
+    <string name="fact_unknown">Unknown</string>
+    <string name="fact_wifi_none">None</string>
+    <string name="fact_wifi_slow">Slow</string>
+    <string name="fact_wifi_fast">Fast</string>
+    <string name="fact_wifi_free">Yes, free</string>
+    <string name="fact_power_none">None</string>
+    <string name="fact_power_few">A few</string>
+    <string name="fact_power_many">Plenty</string>
+    <string name="fact_laptop_ok">Welcome</string>
+    <string name="fact_laptop_weekdays">Not on weekends</string>
+    <string name="fact_laptop_no">Not allowed</string>
+    <string name="fact_quiet_yes">Usually quiet</string>
+    <string name="fact_quiet_no">Often busy</string>
+    <string name="source_users">according to users</string>
+    <string name="source_osm">according to OpenStreetMap</string>
+
+    <string name="today">today</string>
+    <string name="hours_closed">Closed</string>
+    <string name="hours_all_day">Open all day</string>
+    <string name="hours_holidays">Hours may differ on public and school holidays.</string>
+    <string name="hours_as_in_osm">As written in OpenStreetMap; the app cannot show these hours per day.</string>
+
+    <string name="daypart_title">Crowds by time of day</string>
+    <string name="daypart_morning">Morning</string>
+    <string name="daypart_afternoon">Afternoon</string>
+    <string name="daypart_evening">Evening</string>
+    <string name="daypart_weekend">Weekend</string>
+    <string name="daypart_now">now</string>
+    <string name="daypart_no_reports">No reports yet</string>
+    <string name="daypart_note">From reports in the past year. Morning is until 12:00, afternoon until 17:00.</string>
+    <plurals name="daypart_reports">
+        <item quantity="one">%d report</item>
+        <item quantity="other">%d reports</item>
+    </plurals>
+    <string name="quietness_quiet">Quiet</string>
+    <string name="quietness_mixed">Varies</string>
+    <string name="quietness_busy">Busy</string>
+
+    <string name="last_confirmed">Last confirmed by a user on %1$s.</string>
+    <string name="stale_title">Not confirmed recently</string>
+    <string name="stale_body">Users last reported something here on %1$s. Is it still right? Let us know below.</string>
+
+    <string name="route_bike">Cycling route</string>
+    <string name="route_walk">Walking route</string>
+    <string name="show_on_map">On map</string>
+    <string name="route_unavailable">No app found to open the route</string>
+
+    <string name="no_places_title">No places found</string>
+    <string name="no_places_filtered">No place matches all filters.</string>
+    <string name="no_places_loaded">No places have been loaded yet.</string>
+    <string name="clear_filters">Clear filters</string>
+    <string name="refresh_failed">Updating places failed.</string>
+    <string name="retry">Retry</string>
+
+    <string name="search_hint">Search by name, town or address</string>
+    <string name="search_hint_list_only">Search by name or address</string>
+    <string name="search_clear">Clear search</string>
+    <string name="search_back_home">Back to %1$s</string>
+    <string name="search_unavailable">OpenStreetMap is busy right now. Try again in a few minutes.</string>
+    <string name="search_failed">Search failed. Check your internet connection and try again.</string>
+
+    <string name="location_prompt_title">Places near you</string>
+    <string name="location_prompt_body">Share your location to see the nearest places first. Your location stays on your phone.</string>
+    <string name="location_prompt_precise_title">You share an approximate location</string>
+    <string name="location_prompt_precise_body">Distances are an estimate within a few kilometres. With a precise location, "nearest" is right.</string>
+    <string name="location_use">Use location</string>
+    <string name="location_use_precise">Precise location</string>
+    <string name="not_now">Not now</string>
+    <string name="my_location">My location</string>
+
+    <string name="report_prompt_title">Is this still right?</string>
+    <string name="report_prompt_body">Tell us what you see now in a few taps.</string>
+    <string name="report_open">Report</string>
+    <string name="report_title">What is right now?</string>
+    <string name="report_quiet">Quiet</string>
+    <string name="report_busy">Busy</string>
+    <string name="report_closed">This place has closed for good</string>
+    <string name="report_stars">Your stars as a workspot</string>
+    <string name="report_star">%1$d of 5 stars</string>
+    <string name="rating_none">No stars yet</string>
+    <string name="rating_summary">%1$s (%2$d)</string>
+    <string name="rating_description">%1$s of 5 stars, %2$d ratings</string>
+    <string name="report_send">Send</string>
+    <string name="report_anonymous">Anonymous: you do not need an account.</string>
+    <string name="report_sample_mode">Sample mode: your report stays on this phone.</string>
+    <string name="report_sent">Thanks! Your report was sent.</string>
+    <string name="report_saved_locally">Saved on your phone (sample mode).</string>
+    <string name="report_rate_limited">You have reported a lot today. Try again tomorrow.</string>
+    <string name="report_failed">Sending failed. Try again in a moment.</string>
+
+    <string name="profile_title">Profile and settings</string>
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+
+    <string name="contributions_title">Your reports</string>
+    <string name="contributions_sample_mode">Sample mode: reports stay on this phone, so they are not listed here.</string>
+    <string name="contributions_failed">Loading your reports failed.</string>
+    <string name="contributions_none">You have not reported anything yet. Tap Report at a place to tell what is right.</string>
+    <plurals name="contributions_count">
+        <item quantity="one">You helped with %d place. Thank you!</item>
+        <item quantity="other">You helped with %d places. Thank you!</item>
+    </plurals>
+    <string name="contribution_unknown_place">A place that no longer exists</string>
+    <string name="contribution_wifi_none">No Wi-Fi</string>
+    <string name="contribution_power_none">No outlets</string>
+    <string name="contribution_power_few">A few outlets</string>
+    <string name="contribution_closed">Closed for good</string>
+    <plurals name="contribution_stars">
+        <item quantity="one">%d star</item>
+        <item quantity="other">%d stars</item>
+    </plurals>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_theme">Appearance</string>
+    <string name="theme_system">Same as your phone</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_language">Language</string>
+    <string name="language_system">Your phone\'s language</string>
+
+    <string name="privacy_section">Privacy</string>
+    <string name="privacy_title">Privacy statement</string>
+    <string name="privacy_location_title">Your location</string>
+    <string name="privacy_location_body">BeanDesk only uses your location when you allow it, and only while you use the app. The app works out distances on your phone; your location goes nowhere.</string>
+    <string name="privacy_reports_title">Reports and stars</string>
+    <string name="privacy_reports_body">With your first report BeanDesk creates an anonymous account, without a name, email address or phone number. Your reports and stars are stored with that account in our database at Supabase (in Frankfurt), so you can see them here and we can fight abuse. Others only see the totals per place, never who reported what.</string>
+    <string name="privacy_search_title">Search</string>
+    <string name="privacy_search_body">What you type in the search field goes to our server. It looks up the town or address at PDOK (the Dutch government\'s location service) and gets places from OpenStreetMap. Your search is not linked to your account.</string>
+    <string name="privacy_map_title">Map and route</string>
+    <string name="privacy_map_body">The map loads map images from OpenFreeMap, which therefore sees your IP address and the part of the map you view. A route opens in Google Maps, where Google\'s privacy policy applies.</string>
+    <string name="privacy_delete_title">Deleting</string>
+    <string name="privacy_delete_body">Delete account below removes your account, reports and stars at once and for good. What they added to a place\'s information is then worked out again. BeanDesk has no ads and does not track you.</string>
+
+    <string name="account_anonymous">Your account is anonymous: no name or email address is attached to it.</string>
+    <string name="account_none">You have no account. BeanDesk only creates one with your first report.</string>
+    <string name="account_sample_mode">Sample mode: there is no account, everything stays on this phone.</string>
+    <string name="account_delete">Delete account</string>
+    <string name="account_delete_title">Delete account?</string>
+    <string name="account_delete_body">Your reports and stars will be deleted too. This cannot be undone.</string>
+    <string name="account_delete_confirm">Delete</string>
+    <string name="account_deleted">Your account and reports have been deleted.</string>
+    <string name="account_delete_failed">Deleting failed. Check your internet connection and try again.</string>
+
+    <string name="about_title">About BeanDesk</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_osm">Place data: © OpenStreetMap contributors, under the ODbL licence.</string>
+
+    <string name="app_icon_title">App icon</string>
+    <string name="app_icon_hint">Your new icon appears on your home screen and in your app list once you leave the app. If BeanDesk is on your home screen, some phones need you to place it there again.</string>
+    <string name="app_icon_espresso">Espresso</string>
+    <string name="app_icon_terracotta">Terracotta</string>
+    <string name="app_icon_crema">Crema</string>
+    <string name="app_icon_teal">Teal</string>
+    <string name="app_icon_night">Night</string>
+</resources>

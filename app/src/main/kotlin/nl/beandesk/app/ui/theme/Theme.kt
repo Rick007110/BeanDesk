@@ -54,8 +54,8 @@ private val DarkStatus = StatusColors(
 val LocalStatusColors = staticCompositionLocalOf { LightStatus }
 
 @Composable
-fun BeanDeskTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun BeanDeskTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val dark = darkTheme
     CompositionLocalProvider(LocalStatusColors provides if (dark) DarkStatus else LightStatus) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,

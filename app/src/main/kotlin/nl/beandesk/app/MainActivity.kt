@@ -1,15 +1,15 @@
 package nl.beandesk.app
 
+import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import nl.beandesk.app.ui.places.PlacesScreen
 import nl.beandesk.app.ui.places.PlacesViewModel
-import nl.beandesk.app.ui.theme.BeanDeskTheme
+import nl.beandesk.app.ui.profile.ProfileActivity
 
-class MainActivity : ComponentActivity() {
+class MainActivity : LocalizedActivity() {
     private val viewModel: PlacesViewModel by viewModels { PlacesViewModel.Factory }
     private val appIconManager by lazy { (application as BeanDeskApplication).container.appIconManager }
 
@@ -17,8 +17,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BeanDeskTheme {
-                PlacesScreen(viewModel, appIconManager)
+            Themed {
+                PlacesScreen(
+                    viewModel = viewModel,
+                    appIconManager = appIconManager,
+                    onOpenProfile = { startActivity(Intent(this, ProfileActivity::class.java)) },
+                )
             }
         }
     }

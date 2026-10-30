@@ -9,6 +9,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import nl.beandesk.app.DutchRule
 import nl.beandesk.app.data.PlaceRepository
 import nl.beandesk.app.data.local.BeanDeskDatabase
 import nl.beandesk.app.data.location.LocationRepository
@@ -25,7 +26,10 @@ import org.junit.runner.RunWith
 /** The place and report sheets on the places screen, used with a finger (see [Finger]). */
 @RunWith(AndroidJUnit4::class)
 class SheetGesturesTest {
-    @get:Rule
+    @get:Rule(order = 0)
+    val dutch = DutchRule()
+
+    @get:Rule(order = 1)
     val testName = TestName()
 
     private val context: Context = ApplicationProvider.getApplicationContext()
@@ -64,7 +68,7 @@ class SheetGesturesTest {
         finger.tapUntilSelected(By.text("Druk"))
         finger.tap(By.text("Versturen"), expect = By.text("Opgeslagen op je telefoon (voorbeeldmodus)."))
         finger.awaitGone(By.text("Wat klopt er nu?"))
-        finger.awaitGone(By.text("Route"))
+        finger.awaitGone(By.text("Fietsroute"))
     }
 
     @Test
@@ -91,8 +95,8 @@ class SheetGesturesTest {
     fun swipingTheSheetAwayLeavesTheScreenWorking() {
         launch()
         openPlace()
-        finger.pullDown(finger.await(By.text("Route")))
-        finger.awaitGone(By.text("Route"))
+        finger.pullDown(finger.await(By.text("Fietsroute")))
+        finger.awaitGone(By.text("Fietsroute"))
         finger.shot("swiped-away")
         // The screen behind still reacts: a filter, and the next place.
         finger.tapUntilSelected(By.text("Laptop ok"))
@@ -109,8 +113,8 @@ class SheetGesturesTest {
         finger.pullDown(finger.await(By.text("Wat klopt er nu?")))
         finger.awaitGone(By.text("Wat klopt er nu?"))
         // The place's sheet is still there underneath and goes the same way.
-        finger.pullDown(finger.await(By.text("Route")))
-        finger.awaitGone(By.text("Route"))
+        finger.pullDown(finger.await(By.text("Fietsroute")))
+        finger.awaitGone(By.text("Fietsroute"))
         finger.shot("swiped-away")
         finger.tapUntilSelected(By.text("Laptop ok"))
         openPlace()
@@ -150,7 +154,7 @@ class SheetGesturesTest {
         val bounds = (card ?: finger.fail("No card for $name")).visibleBounds
         // The left of the name: the map button sits in the middle at the bottom.
         finger.device.click(bounds.left + 20, bounds.centerY())
-        finger.await(By.text("Route"))
+        finger.await(By.text("Fietsroute"))
         finger.shot("place")
     }
 

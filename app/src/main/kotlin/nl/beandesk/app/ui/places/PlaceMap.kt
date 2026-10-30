@@ -15,6 +15,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -132,14 +133,15 @@ fun PlaceMap(
         }
     }
 
-    LaunchedEffect(style, items) {
+    val locale = LocalConfiguration.current.locales[0]
+    LaunchedEffect(style, items, locale) {
         val loadedStyle = style ?: return@LaunchedEffect
         val density = context.resources.displayMetrics.density
         val features = items.map { item ->
             Feature.fromGeometry(Point.fromLngLat(item.place.location.lng, item.place.location.lat)).apply {
                 addNumberProperty(PLACE_ID, item.place.id)
                 item.place.rating?.let { rating ->
-                    val label = rating.averageText()
+                    val label = rating.averageText(locale)
                     if (loadedStyle.getImage(RATING_IMAGE_PREFIX + label) == null) {
                         loadedStyle.addImage(RATING_IMAGE_PREFIX + label, ratingLabel(label, density))
                     }
