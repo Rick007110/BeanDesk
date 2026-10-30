@@ -66,6 +66,7 @@ fun PlaceDetailSheet(
                 }
             }
 
+            RatingStars(place.rating, starSize = 20.dp)
             StatusLine(item.status)
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

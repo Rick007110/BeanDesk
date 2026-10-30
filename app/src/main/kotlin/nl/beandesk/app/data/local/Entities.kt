@@ -28,6 +28,9 @@ data class PlaceEntity(
     val communityQuiet: Boolean?,
     val communityLaptopPolicy: String?,
     val closedReports: Int,
+    // Stars from users; null average without ratings.
+    val ratingAverage: Double?,
+    val ratingCount: Int,
     val updatedAt: String,
 )
 

@@ -44,6 +44,9 @@ abstract class PlaceDao {
         upsertCity(city)
     }
 
+    @Query("UPDATE places SET ratingAverage = :average, ratingCount = :count WHERE id = :id")
+    abstract suspend fun setRating(id: Long, average: Double, count: Int)
+
     /** Keeps the [keep] most recent searches, so the cache does not grow with every search. */
     @Transaction
     open suspend fun pruneSearches(keep: Int) {

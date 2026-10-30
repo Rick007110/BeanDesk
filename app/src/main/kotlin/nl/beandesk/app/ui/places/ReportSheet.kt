@@ -66,7 +66,8 @@ fun ReportSheet(
     var quiet by rememberSaveable(place.id) { mutableStateOf(known?.quiet) }
     var laptop by rememberSaveable(place.id) { mutableStateOf(known?.laptopPolicy) }
     var closed by rememberSaveable(place.id) { mutableStateOf(false) }
-    val report = Report(place.id, wifi, power, quiet, laptop, closed)
+    var stars by rememberSaveable(place.id) { mutableStateOf<Int?>(null) }
+    val report = Report(place.id, wifi, power, quiet, laptop, closed, stars)
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -89,6 +90,10 @@ fun ReportSheet(
                 )
             }
 
+            Column {
+                Text(stringResource(R.string.report_stars), style = MaterialTheme.typography.titleSmall)
+                StarPicker(selected = stars, onSelect = { stars = it })
+            }
             ChoiceRow(
                 label = R.string.fact_label_wifi,
                 options = listOf(

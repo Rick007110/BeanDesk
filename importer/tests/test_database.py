@@ -421,3 +421,58 @@ def test_users_cannot_run_the_extract_import(conn):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         conn.execute("set local role authenticated")
         conn.execute("select public.import_osm_file('https://example.com')")
+
+
+# --- Stars ---------------------------------------------------------------------------------
+
+def rate_as(conn, reporter: uuid.UUID, target_place: int, rating: int):
+    """Rates the way the app does: an upsert on (place_id, user_id) as the authenticated role."""
+    with conn.transaction():
+        conn.execute("set local role authenticated")
+        conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps({"sub": str(reporter)}),))
+        conn.execute(
+            "insert into public.place_ratings (place_id, rating) values (%s, %s)"
+            " on conflict (place_id, user_id) do update set place_id = excluded.place_id, rating = excluded.rating",
+            (target_place, rating),
+        )
+
+
+def test_ratings_show_as_an_average_in_the_export(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    first, second = create_user(conn), create_user(conn)
+
+    rate_as(conn, first, cafe, 5)
+    rate_as(conn, second, cafe, 4)
+    # A new rating by the same user replaces the old one.
+    rate_as(conn, second, cafe, 3)
+
+    exported = {p["osm_id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    assert exported[1001]["rating"] == {"average": 4.0, "count": 2}
+    assert exported[2002]["rating"] is None
+    assert exported[1001] == {p["osm_id"]: p for p in area_export(conn, radius=5000)["places"]}[1001]
+
+
+def test_users_cannot_rate_for_someone_else_or_read_others(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    user, other = create_user(conn), create_user(conn)
+    rate_as(conn, other, cafe, 2)
+
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute("set local role authenticated")
+        conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps({"sub": str(user)}),))
+        conn.execute("insert into public.place_ratings (place_id, user_id, rating) values (%s, %s, 5)", (cafe, other))
+
+    with conn.transaction():
+        conn.execute("set local role authenticated")
+        conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps({"sub": str(user)}),))
+        assert conn.execute("select count(*) from public.place_ratings").fetchone()[0] == 0
+        # The summary is public.
+        assert conn.execute("select rating_count from public.place_rating_summary").fetchone()[0] == 1
+
+
+def test_ratings_outside_one_to_five_are_refused(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    with pytest.raises(psycopg.errors.CheckViolation):
+        rate_as(conn, create_user(conn), place_id(conn, 1001), 6)

@@ -1,6 +1,7 @@
 package nl.beandesk.app.ui.places
 
 import android.content.Context
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -92,14 +93,13 @@ class PlacesScreenTest {
         searchField.performTextInput("Amersfoort")
         searchField.performImeAction()
 
-        // The field empties and "Amersfoort" shows as the area, with the two places of the fake search.
-        compose.waitUntil(10_000) {
-            compose.onAllNodes(hasSetTextAction() and hasText("Amersfoort")).fetchSemanticsNodes().isEmpty() &&
-                compose.onAllNodesWithText("Amersfoort").fetchSemanticsNodes().isNotEmpty()
-        }
+        // The list switches to the two places of the fake search, the field empties and "Amersfoort"
+        // shows as the area.
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("2 plekken").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Koffie & Werk").assertExists()
         compose.onNodeWithText("Stadsbibliotheek Centrum").assertExists()
-        compose.onNodeWithText("2 plekken").assertExists()
+        compose.onAllNodes(hasSetTextAction() and hasText("Amersfoort")).assertCountEquals(0)
+        assertEquals(true, compose.onAllNodesWithText("Amersfoort").fetchSemanticsNodes().isNotEmpty())
         assertEquals(listOf("Amersfoort"), search.queries)
     }
 

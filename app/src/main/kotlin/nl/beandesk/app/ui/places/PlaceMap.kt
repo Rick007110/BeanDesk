@@ -1,5 +1,10 @@
 package nl.beandesk.app.ui.places
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -9,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -20,11 +26,22 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression.concat
+import org.maplibre.android.style.expressions.Expression.get
+import org.maplibre.android.style.expressions.Expression.has
+import org.maplibre.android.style.expressions.Expression.literal
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.circleColor
 import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconAnchor
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.iconImage
+import org.maplibre.android.style.layers.PropertyFactory.iconOffset
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -33,6 +50,9 @@ import org.maplibre.android.geometry.LatLng as MapLatLng
 
 private const val SOURCE_ID = "places"
 private const val LAYER_ID = "places-circles"
+private const val RATING_LAYER_ID = "places-ratings"
+private const val RATING = "rating"
+private const val RATING_IMAGE_PREFIX = "rating-"
 private const val USER_SOURCE_ID = "user-location"
 private const val USER_LAYER_ID = "user-location-dot"
 private const val PLACE_ID = "id"
@@ -78,6 +98,18 @@ fun PlaceMap(
                         circleStrokeColor("#FFFFFF"),
                     ),
                 )
+                // "★ 4,3" next to rated places; the label images are added per value (see below).
+                loadedStyle.addLayer(
+                    SymbolLayer(RATING_LAYER_ID, SOURCE_ID)
+                        .withFilter(has(RATING))
+                        .withProperties(
+                            iconImage(concat(literal(RATING_IMAGE_PREFIX), get(RATING))),
+                            iconAnchor(Property.ICON_ANCHOR_BOTTOM_LEFT),
+                            iconOffset(arrayOf(4f, -4f)),
+                            iconAllowOverlap(true),
+                            iconIgnorePlacement(true),
+                        ),
+                )
                 // Added last, so the user's dot is drawn on top of the places.
                 loadedStyle.addSource(GeoJsonSource(USER_SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
                 loadedStyle.addLayer(
@@ -101,12 +133,21 @@ fun PlaceMap(
     }
 
     LaunchedEffect(style, items) {
+        val loadedStyle = style ?: return@LaunchedEffect
+        val density = context.resources.displayMetrics.density
         val features = items.map { item ->
             Feature.fromGeometry(Point.fromLngLat(item.place.location.lng, item.place.location.lat)).apply {
                 addNumberProperty(PLACE_ID, item.place.id)
+                item.place.rating?.let { rating ->
+                    val label = rating.averageText()
+                    if (loadedStyle.getImage(RATING_IMAGE_PREFIX + label) == null) {
+                        loadedStyle.addImage(RATING_IMAGE_PREFIX + label, ratingLabel(label, density))
+                    }
+                    addStringProperty(RATING, label)
+                }
             }
         }
-        style?.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(features))
+        loadedStyle.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(FeatureCollection.fromFeatures(features))
     }
 
     LaunchedEffect(style, userLocation) {
@@ -141,6 +182,35 @@ fun PlaceMap(
     }
 
     AndroidView(factory = { mapView }, modifier = modifier)
+}
+
+/** A small white pill with an amber star and the average, e.g. "★ 4,3", drawn once per value. */
+private fun ratingLabel(text: String, density: Float): Bitmap {
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 12f * density
+        typeface = Typeface.DEFAULT_BOLD
+        color = 0xFF3B2A20.toInt()
+    }
+    val starPaint = Paint(textPaint).apply { color = StarColor.toArgb() }
+    val star = "\u2605 "
+    val padding = 6f * density
+    val width = starPaint.measureText(star) + textPaint.measureText(text) + 2 * padding
+    val height = textPaint.fontSpacing + padding
+    val bitmap = Bitmap.createBitmap(width.toInt() + 1, height.toInt() + 1, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val pill = RectF(density / 2, density / 2, width - density / 2, height - density / 2)
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density
+        color = 0x33000000
+    }
+    canvas.drawRoundRect(pill, height / 2, height / 2, fill)
+    canvas.drawRoundRect(pill, height / 2, height / 2, border)
+    val baseline = height / 2 - (textPaint.descent() + textPaint.ascent()) / 2
+    canvas.drawText(star, padding, baseline, starPaint)
+    canvas.drawText(text, padding + starPaint.measureText(star), baseline, textPaint)
+    return bitmap
 }
 
 /** Forwards the screen's lifecycle to the MapView, as MapLibre requires. */

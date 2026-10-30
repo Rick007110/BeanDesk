@@ -29,6 +29,9 @@ data class CommunityFacts(
     val closedReports: Int = 0,
 )
 
+/** Stars from users as a laptop spot: the average of 1 to 5 and how many gave one. */
+data class Rating(val average: Double, val count: Int)
+
 data class Place(
     val id: Long,
     val category: Category,
@@ -38,6 +41,7 @@ data class Place(
     val openingHours: String?,
     val osm: OsmFacts = OsmFacts(),
     val community: CommunityFacts? = null,
+    val rating: Rating? = null,
 ) {
     /** User reports win over OSM tags; null means nobody knows yet. */
     val hasWifi: Boolean?
