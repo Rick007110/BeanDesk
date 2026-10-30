@@ -476,3 +476,44 @@ def test_ratings_outside_one_to_five_are_refused(conn, overpass_elements):
     db.import_elements(conn, "utrecht", overpass_elements)
     with pytest.raises(psycopg.errors.CheckViolation):
         rate_as(conn, create_user(conn), place_id(conn, 1001), 6)
+
+
+# --- Search by name ------------------------------------------------------------------------
+
+def name_search(conn, query: str, label: str = "label") -> dict:
+    return conn.execute("select public.name_search(%s, %s)", (query, label)).fetchone()[0]
+
+
+def test_name_search_finds_every_word_in_name_or_address(conn, overpass_elements):
+    import_area(conn, FIXTURE_CELLS, overpass_elements)
+
+    found = name_search(conn, "  KOFFIE   oudegracht ", label="Koffie oudegracht")
+    assert [p["osm_id"] for p in found["places"]] == [1001]
+    assert found["city"] == "Koffie oudegracht"
+    assert found["center"] == {"lat": 52.0911, "lng": 5.1201}
+    assert found["places"][0].keys() == json.loads(APP_SAMPLE.read_text())["places"][0].keys()
+
+    assert name_search(conn, "koffie neude")["places"] == []
+    assert name_search(conn, "   ")["places"] == []
+
+
+def test_name_search_ignores_accents_and_wildcards(conn):
+    import_area(
+        conn,
+        FIXTURE_CELLS,
+        [
+            element(1, name="Café de Zaak", amenity="cafe"),
+            element(2, name="100% Koffie", amenity="cafe"),
+            element(3, name="Koffie_Bar", amenity="cafe"),
+        ],
+    )
+    assert [p["osm_id"] for p in name_search(conn, "cafe zaak")["places"]] == [1]
+    assert [p["osm_id"] for p in name_search(conn, "100%")["places"]] == [2]
+    # "_" and "%" are not wildcards: "koffie_" does not match "100% Koffie".
+    assert [p["osm_id"] for p in name_search(conn, "koffie_")["places"]] == [3]
+
+
+def test_users_cannot_run_name_search(conn):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute("set local role anon")
+        name_search(conn, "koffie")

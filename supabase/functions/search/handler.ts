@@ -3,6 +3,7 @@
 import {
   type Cell,
   type Geocoded,
+  looksLikePlace,
   overpassQuery,
   parsePdok,
   parseRequest,
@@ -20,6 +21,8 @@ export interface Store {
   recordFetch(cells: number, elements: number): Promise<void>;
   importArea(cells: Cell[], elements: unknown[]): Promise<void>;
   areaExport(lat: number, lng: number, radiusM: number, label: string): Promise<{ places: unknown[] }>;
+  /** Places across the country whose name or address holds every word (name_search). */
+  nameSearch(query: string, label: string): Promise<{ places: unknown[] }>;
   placeLocation(placeId: number): Promise<{ lat: number; lng: number } | null>;
 }
 
@@ -81,22 +84,44 @@ export function createHandler(deps: Deps) {
     try {
       return request.refreshPlaceId !== null
         ? await refresh(deps, request.refreshPlaceId)
-        : await search(deps, request.query!);
+        : await search(deps, request.query!, request.display!);
     } catch (e) {
       console.error("search failed", e);
-      return e instanceof UpstreamError ? json({ error: "geocode_failed" }, 502) : json({ error: "internal" }, 500);
+      return json({ error: "internal" }, 500);
     }
   };
 }
 
-async function search(deps: Deps, query: string): Promise<Response> {
-  let hit = await deps.store.getGeocode(query);
-  if (!hit) {
-    hit = await geocode(deps, query);
-    if (!hit) return json({ error: "not_found" }, 404);
-    await deps.store.putGeocode(query, hit);
+/**
+ * One text, two meanings: the name of a cafe ("Starbucks") or a place ("Amersfoort"). Both are
+ * looked up; a clear place or address wins, then places by name, then whatever PDOK found.
+ */
+async function search(deps: Deps, query: string, display: string): Promise<Response> {
+  const [found, byName] = await Promise.all([lookUp(deps, query), deps.store.nameSearch(query, display)]);
+  if (found.hit && looksLikePlace(query, found.hit)) return searchArea(deps, found.hit);
+  if (byName.places.length > 0) {
+    return json({ ...byName, search: { kind: "naam", label: display, status: "cached", fetched_cells: 0, pending_cells: 0 } });
   }
+  if (found.hit) return searchArea(deps, found.hit);
+  return found.failed ? json({ error: "geocode_failed" }, 502) : json({ error: "not_found" }, 404);
+}
 
+/** The place or address the text stands for: from the cache, else from PDOK (then cached). */
+async function lookUp(deps: Deps, query: string): Promise<{ hit: Geocoded | null; failed: boolean }> {
+  const cached = await deps.store.getGeocode(query);
+  if (cached) return { hit: cached, failed: false };
+  try {
+    const hit = await geocode(deps, query);
+    if (hit) await deps.store.putGeocode(query, hit);
+    return { hit, failed: false };
+  } catch (e) {
+    // The search by name can still answer.
+    console.warn("geocoding failed", e);
+    return { hit: null, failed: true };
+  }
+}
+
+async function searchArea(deps: Deps, hit: Geocoded): Promise<Response> {
   const radius = RADIUS_M[hit.kind];
   const sync = await syncCells(deps, hit.lat, hit.lng, radius, SEARCH_MAX_AGE);
   const area = await deps.store.areaExport(hit.lat, hit.lng, radius, hit.label);

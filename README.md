@@ -108,10 +108,10 @@ De databasefunctie `city_export()` schrijft het formaat, `core/.../export/CityEx
 
 ## Zoeken
 
-Het zoekveld boven de lijst doet twee dingen:
+Het zoekveld boven de lijst:
 
 - **Typen** filtert de getoonde plekken direct op naam en adres, op de telefoon. Hoofdletters en accenten maken niet uit.
-- **Zoeken** (de zoektoets of de kaart "Zoek rond …") vraagt de edge function om de plekken rond een plaats, adres of postcode. Het chipje met de plaatsnaam brengt je terug naar de stad.
+- **Twee seconden niet typen** (of de zoektoets) zoekt de tekst in heel Nederland: als naam van een zaak ("Starbucks") en als plaats, adres of postcode ("Amersfoort", "Oudegracht 10 Utrecht"). Is de tekst duidelijk een plaats of adres, dan toont de app de zaken in de buurt; anders de zaken waarvan de naam overeenkomt (hooguit 100, dichtstbijzijnde eerst). Het veld leegmaken of het chipje met de plaatsnaam brengt je terug naar de stad.
 
 De edge function:
 

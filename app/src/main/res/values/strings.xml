@@ -86,11 +86,7 @@
     <string name="search_hint">Zoek op naam, plaats of adres</string>
     <string name="search_hint_list_only">Zoek op naam of adres</string>
     <string name="search_clear">Zoekveld leegmaken</string>
-    <string name="search_area_action">Zoek rond „%1$s”</string>
-    <string name="search_area_hint">Een plaats, adres of postcode. Een nieuw gebied ophalen duurt de eerste keer even.</string>
-    <string name="search_area_busy">Zoeken… Een nieuw gebied ophalen kan even duren.</string>
     <string name="search_back_home">Terug naar %1$s</string>
-    <string name="search_not_found">Geen plaats of adres gevonden met die naam.</string>
     <string name="search_unavailable">OpenStreetMap is nu druk. Probeer het over een paar minuten opnieuw.</string>
     <string name="search_failed">Zoeken is mislukt. Controleer je internet en probeer het opnieuw.</string>
 

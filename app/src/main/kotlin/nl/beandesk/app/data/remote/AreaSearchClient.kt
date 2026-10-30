@@ -12,8 +12,11 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import nl.beandesk.core.export.CityExport
 import nl.beandesk.core.export.CityExportParser
 
@@ -25,7 +28,7 @@ class AreaSearchClient(
 ) : AreaSearchSource {
     private val url = "$supabaseUrl/functions/v1/search"
 
-    override suspend fun search(query: String): CityExport {
+    override suspend fun search(query: String): SearchResult {
         val body = try {
             post(buildJsonObject { put("q", JsonPrimitive(query)) }.toString())
         } catch (e: CancellationException) {
@@ -35,7 +38,9 @@ class AreaSearchClient(
         } catch (e: Exception) {
             throw SearchException(SearchFailure.FAILED, e)
         }
-        return CityExportParser.parse(body)
+        // "search": {"kind": "naam" | "woonplaats" | ...} next to the export fields.
+        val kind = Json.parseToJsonElement(body).jsonObject["search"]?.jsonObject?.get("kind")?.jsonPrimitive?.content
+        return SearchResult(CityExportParser.parse(body), byName = kind == "naam")
     }
 
     override suspend fun refreshAround(placeId: Long) {

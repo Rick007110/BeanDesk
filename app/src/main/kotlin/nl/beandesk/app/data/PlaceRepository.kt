@@ -34,6 +34,8 @@ data class Area(
     val label: String,
     // What was searched; null for a city.
     val query: String? = null,
+    // True when the search found places by name across the country rather than around one place.
+    val byName: Boolean = false,
 )
 
 /**
@@ -72,13 +74,13 @@ class PlaceRepository(
     }
 
     /**
-     * Finds the places around a town or address. The first search of an area makes the backend
-     * fetch it from OpenStreetMap; after that it comes straight from the database.
+     * Finds places by name across the country, or the places around a town or address. The
+     * backend has all of the Netherlands, so this takes a second or two.
      * Throws [nl.beandesk.app.data.remote.SearchException].
      */
     suspend fun search(query: String): Area {
-        val export = searchSource.search(query)
-        val area = Area(key = SEARCH_PREFIX + export.city.lowercase(), label = export.city, query = query)
+        val (export, byName) = searchSource.search(query)
+        val area = Area(key = SEARCH_PREFIX + export.city.lowercase(), label = export.city, query = query, byName = byName)
         store(key = area.key, label = area.label, export = export)
         dao.pruneSearches(keep = KEPT_SEARCHES)
         return area

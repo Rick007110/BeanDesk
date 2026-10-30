@@ -58,6 +58,7 @@ const store: Store = {
   },
   areaExport: (lat, lng, radiusM, label) =>
     rpc("area_export", { p_lat: lat, p_lng: lng, p_radius_m: radiusM, p_label: label }),
+  nameSearch: (query, label) => rpc("name_search", { p_query: query, p_label: label }),
   async placeLocation(placeId) {
     const rows = await rpc<{ lat: number; lng: number }[]>("place_location", { p_place_id: placeId });
     return rows[0] ?? null;
