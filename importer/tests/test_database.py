@@ -517,3 +517,41 @@ def test_users_cannot_run_name_search(conn):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         conn.execute("set local role anon")
         name_search(conn, "koffie")
+
+
+def find_by_name(conn, query: str, near: tuple[float, float, int] | None = None) -> dict:
+    lat, lng, radius = near or (None, None, None)
+    return conn.execute(
+        "select public.find_by_name(%s, 'label', %s, %s, %s)", (query, lat, lng, radius)
+    ).fetchone()[0]
+
+
+def test_find_by_name_ignores_spaces_and_uses_town_and_postcode(conn):
+    import_area(
+        conn,
+        FIXTURE_CELLS,
+        [
+            element(1, name="Coffee Company", amenity="cafe", addr__city="Utrecht", addr__postcode="3511 AB"),
+            element(2, name="Coffee Company", amenity="cafe", addr__city="Breda", lat=52.091, lon=5.125),
+            element(3, name="Anne&Max", amenity="cafe"),
+        ],
+    )
+    assert sorted(p["osm_id"] for p in find_by_name(conn, "coffeecompany")["places"]) == [1, 2]
+    assert [p["osm_id"] for p in find_by_name(conn, "coffeecompany breda")["places"]] == [2]
+    assert [p["osm_id"] for p in find_by_name(conn, "coffee company 3511ab")["places"]] == [1]
+    assert [p["osm_id"] for p in find_by_name(conn, "annemax")["places"]] == [3]
+
+
+def test_find_by_name_near_a_point_is_nearest_first(conn):
+    import_area(
+        conn,
+        FIXTURE_CELLS,
+        [
+            element(1, name="Coffee Company", amenity="cafe", lat=52.09, lon=5.12),
+            element(2, name="Coffee Company", amenity="cafe", lat=52.095, lon=5.12),
+            element(3, name="Coffee Company", amenity="cafe", lat=52.2, lon=5.12),
+        ],
+    )
+    found = find_by_name(conn, "coffee company", near=(52.096, 5.12, 2000))
+    assert [p["osm_id"] for p in found["places"]] == [2, 1]
+    assert found["center"] == {"lat": 52.096, "lng": 5.12}

@@ -4,6 +4,7 @@ import {
   type Cell,
   type Geocoded,
   looksLikePlace,
+  placeSplits,
   overpassQuery,
   parsePdok,
   parseRequest,
@@ -21,8 +22,11 @@ export interface Store {
   recordFetch(cells: number, elements: number): Promise<void>;
   importArea(cells: Cell[], elements: unknown[]): Promise<void>;
   areaExport(lat: number, lng: number, radiusM: number, label: string): Promise<{ places: unknown[] }>;
-  /** Places across the country whose name or address holds every word (name_search). */
-  nameSearch(query: string, label: string): Promise<{ places: unknown[] }>;
+  /**
+   * Places whose name, address, town or postcode holds every word (find_by_name); across the
+   * country, or only within [near].
+   */
+  nameSearch(query: string, label: string, near?: { lat: number; lng: number; radiusM: number }): Promise<{ places: unknown[] }>;
   placeLocation(placeId: number): Promise<{ lat: number; lng: number } | null>;
 }
 
@@ -92,17 +96,35 @@ export function createHandler(deps: Deps) {
   };
 }
 
+/** Around a town, a name is searched this far out: towns are larger than a search around them. */
+export const NAME_NEAR_TOWN_M = 8000;
+
+const byNameResponse = (found: { places: unknown[] }, label: string) =>
+  json({ ...found, search: { kind: "naam", label, status: "cached", fetched_cells: 0, pending_cells: 0 } });
+
 /**
- * One text, two meanings: the name of a cafe ("Starbucks") or a place ("Amersfoort"). Both are
- * looked up; a clear place or address wins, then places by name, then whatever PDOK found.
+ * One text, several meanings, tried in this order:
+ * 1. a place or address ("Amersfoort", "Oudegracht 10 Utrecht"): the places around it;
+ * 2. a name, perhaps with the town or postcode ("Starbucks", "coffee company breda"): the places
+ *    with that name, town and postcode as OpenStreetMap has them;
+ * 3. a name and a town OpenStreetMap does not record for the place ("anne&max zwolle"): the
+ *    places with that name around the town;
+ * 4. a single word that PDOK only roughly matched, such as a misspelled town: the places around it.
+ * Otherwise nothing: better no results than a list that has nothing to do with the text.
  */
 async function search(deps: Deps, query: string, display: string): Promise<Response> {
   const [found, byName] = await Promise.all([lookUp(deps, query), deps.store.nameSearch(query, display)]);
   if (found.hit && looksLikePlace(query, found.hit)) return searchArea(deps, found.hit);
-  if (byName.places.length > 0) {
-    return json({ ...byName, search: { kind: "naam", label: display, status: "cached", fetched_cells: 0, pending_cells: 0 } });
+  if (byName.places.length > 0) return byNameResponse(byName, display);
+
+  for (const split of placeSplits(query)) {
+    const town = (await lookUp(deps, split.place)).hit;
+    if (!town || town.kind !== "woonplaats" || !looksLikePlace(split.place, town)) continue;
+    const near = await deps.store.nameSearch(split.name, display, { lat: town.lat, lng: town.lng, radiusM: NAME_NEAR_TOWN_M });
+    if (near.places.length > 0) return byNameResponse(near, display);
   }
-  if (found.hit) return searchArea(deps, found.hit);
+
+  if (found.hit && !query.includes(" ")) return searchArea(deps, found.hit);
   return found.failed ? json({ error: "geocode_failed" }, 502) : json({ error: "not_found" }, 404);
 }
 

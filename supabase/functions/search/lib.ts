@@ -120,16 +120,36 @@ export function foldText(text: string): string {
   return text.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().trim();
 }
 
+/** The words of a text, folded, without punctuation: "Oudegracht 10, 3511AM" → oudegracht, 10, 3511am. */
+export function wordsOf(text: string): string[] {
+  return foldText(text).split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 0);
+}
+
 /**
- * Whether the text was meant as this place or address rather than as the name of a cafe:
- * "Amersfoort" for the town, "biltstraat" for "Biltstraat, Utrecht", or anything with a number
- * that PDOK found as an address or postcode.
+ * Whether the text was meant as this place or address rather than as (part of) the name of a
+ * cafe: every word typed is a word of what PDOK found. "Amersfoort", "biltstraat" for
+ * "Biltstraat, Utrecht" and "oudegracht 10 utrecht" are places; "coffeecompany breda" is not,
+ * although PDOK finds Breda for it.
  */
 export function looksLikePlace(query: string, hit: Geocoded): boolean {
-  const q = foldText(query);
-  const label = foldText(hit.label);
-  if (label === q || label.startsWith(`${q},`)) return true;
-  return (hit.kind === "adres" || hit.kind === "postcode") && /\d/.test(q);
+  const label = new Set(wordsOf(hit.label));
+  const words = wordsOf(query);
+  return words.length > 0 && words.every((word) => label.has(word));
+}
+
+/**
+ * The ways to read a text as a name followed or preceded by a town, such as "coffeecompany |
+ * breda" or "breda | coffee company": up to two words at the end or the start as the town.
+ */
+export function placeSplits(query: string): { name: string; place: string }[] {
+  const words = query.split(" ").filter((word) => word.length > 0);
+  const splits: { name: string; place: string }[] = [];
+  for (const size of [1, 2]) {
+    if (words.length <= size) break;
+    splits.push({ name: words.slice(0, -size).join(" "), place: words.slice(-size).join(" ") });
+    splits.push({ name: words.slice(size).join(" "), place: words.slice(0, size).join(" ") });
+  }
+  return splits;
 }
 
 export interface SearchRequest {
