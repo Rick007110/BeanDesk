@@ -119,7 +119,7 @@ describe("search", () => {
     assert.ok(cache.has("amersfoort"));
     assert.deepEqual(log, [
       "fetch api.pdok.nl",
-      "missing 4000 default",
+      "missing 4000 45 days",
       "overpass maps.mail.ru",
       "record 2 2",
       "import 2 2",

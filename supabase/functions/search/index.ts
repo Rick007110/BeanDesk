@@ -35,7 +35,7 @@ const store: Store = {
       p_lat: lat,
       p_lng: lng,
       p_radius_m: radiusM,
-      ...(maxAge ? { p_max_age: maxAge } : {}),
+      p_max_age: maxAge,
     }),
   async fetchesSince(since) {
     const { count, error } = await db
