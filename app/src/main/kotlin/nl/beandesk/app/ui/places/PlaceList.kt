@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -26,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -47,6 +49,8 @@ import nl.beandesk.core.model.Category
 @Composable
 fun PlaceList(
     items: List<PlaceItem>,
+    // The city or search shown; another one starts at the top of the list again.
+    areaKey: String,
     totalCount: Int,
     isRefreshing: Boolean,
     attribution: String,
@@ -55,8 +59,11 @@ fun PlaceList(
     modifier: Modifier = Modifier,
     header: (@Composable () -> Unit)? = null,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(areaKey) { listState.scrollToItem(0) }
     LazyColumn(
         modifier = modifier,
+        state = listState,
         // Bottom padding keeps the last card clear of the floating map button.
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),

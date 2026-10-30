@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -88,7 +89,6 @@ enum class PlacesMessage {
     REPORT_SAVED_LOCALLY,
     REPORT_RATE_LIMITED,
     REPORT_FAILED,
-    SEARCH_NOT_FOUND,
     SEARCH_UNAVAILABLE,
     SEARCH_FAILED,
 }
@@ -125,6 +125,9 @@ class PlacesViewModel(
      */
     var searchText by mutableStateOf("")
         private set
+
+    // The pending or running search; a new letter cancels it and starts the wait again.
+    private var searchJob: Job? = null
 
     private val locationGranted = MutableStateFlow(false)
     private val messageChannel = Channel<PlacesMessage>(Channel.BUFFERED)
@@ -183,44 +186,57 @@ class PlacesViewModel(
         }
     }
 
+    /**
+     * Typing narrows the list at once; two seconds after the last letter the text is also searched
+     * across the country, as the name of a place or as a town or address. An empty field goes
+     * back to the city.
+     */
     fun onSearchTextChange(text: String) {
         searchText = text
+        searchJob?.cancel()
+        if (text.isBlank()) {
+            if (area.value != homeArea) showHomeArea()
+            return
+        }
+        if (!canSearchAreas || text.trim().length < 2) return
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DELAY_MS)
+            runSearch(text.trim())
+        }
     }
 
-    /**
-     * Looks up the typed town or address and shows the places around it. The first search of
-     * an area can take a while: the backend then fetches it from OpenStreetMap.
-     */
-    fun searchArea() {
+    /** The search key on the keyboard: search now instead of after the pause. */
+    fun searchNow() {
         val query = searchText.trim()
-        if (query.length < 2 || flags.value.isSearching || !canSearchAreas) return
-        viewModelScope.launch {
-            flags.update { it.copy(isSearching = true) }
-            try {
-                val found = repository.search(query)
-                area.value = found
-                // The text was a place, not a name to filter on; the list now shows that place.
-                searchText = ""
-                flags.update { it.copy(selectedId = null, focusId = null, hasError = false) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Searching \"$query\" failed", e)
-                messageChannel.send(
-                    when ((e as? SearchException)?.reason) {
-                        SearchFailure.NOT_FOUND -> PlacesMessage.SEARCH_NOT_FOUND
-                        SearchFailure.UNAVAILABLE -> PlacesMessage.SEARCH_UNAVAILABLE
-                        else -> PlacesMessage.SEARCH_FAILED
-                    },
-                )
-            } finally {
-                flags.update { it.copy(isSearching = false) }
+        if (!canSearchAreas || query.length < 2) return
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch { runSearch(query) }
+    }
+
+    private suspend fun runSearch(query: String) {
+        if (area.value.query.equals(query, ignoreCase = true)) return
+        flags.update { it.copy(isSearching = true) }
+        try {
+            area.value = repository.search(query)
+            flags.update { it.copy(selectedId = null, focusId = null, hasError = false) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Searching \"$query\" failed", e)
+            when ((e as? SearchException)?.reason) {
+                // Nothing by that name or place: the list already shows what matches locally.
+                SearchFailure.NOT_FOUND -> Unit
+                SearchFailure.UNAVAILABLE -> messageChannel.send(PlacesMessage.SEARCH_UNAVAILABLE)
+                else -> messageChannel.send(PlacesMessage.SEARCH_FAILED)
             }
+        } finally {
+            flags.update { it.copy(isSearching = false) }
         }
     }
 
     /** Back from a search to the city. */
     fun showHomeArea() {
+        searchJob?.cancel()
         area.value = homeArea
         flags.update { it.copy(selectedId = null, focusId = null, hasError = false) }
     }
@@ -275,11 +291,15 @@ class PlacesViewModel(
         val now = ZonedDateTime.now(ZoneId.of(info?.timezone ?: DEFAULT_TIMEZONE))
         val at = WeekTime(Weekday.entries[now.dayOfWeek.value - 1], now.hour * 60 + now.minute)
         val visible = places.filterNot { it.isReportedClosed }
-        // After a search the nearest to the searched place come first, otherwise the nearest to the user.
-        val anchor = if (current != homeArea) info?.center else location
+        // Around a searched place the nearest to it come first; otherwise (the city, or places found
+        // by name across the country) the nearest to the user.
+        val anchor = if (current != homeArea && !current.byName) info?.center else location
+        // The results of the text being searched are not filtered by it again: around "Amersfoort"
+        // most places do not have "Amersfoort" in their name.
+        val filterText = if (current.query.equals(searchText.trim(), ignoreCase = true)) "" else searchText
         val items = visible
             .map { PlaceItem(it, statusOf(it, at), location?.let { here -> distanceMeters(here, it.location) }) }
-            .filter { flags.filter.matches(it.place, it.status, at) && it.place.matchesText(searchText) }
+            .filter { flags.filter.matches(it.place, it.status, at) && it.place.matchesText(filterText) }
             // Open places first, then the nearest (or by name while there is nothing to measure from).
             .sortedWith(
                 compareBy<PlaceItem>(
@@ -327,6 +347,7 @@ class PlacesViewModel(
     companion object {
         private const val TAG = "PlacesViewModel"
         private const val DEFAULT_TIMEZONE = "Europe/Amsterdam"
+        private const val SEARCH_DELAY_MS = 2_000L
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {

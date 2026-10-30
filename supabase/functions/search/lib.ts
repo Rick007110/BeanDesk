@@ -115,9 +115,28 @@ export function overpassQuery(cells: Cell[]): string {
   return `[out:json][timeout:25];(${boxes});out center tags;`;
 }
 
+/** Lowercase without accents, so "cafe" and "Café" compare equal. */
+export function foldText(text: string): string {
+  return text.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().trim();
+}
+
+/**
+ * Whether the text was meant as this place or address rather than as the name of a cafe:
+ * "Amersfoort" for the town, "biltstraat" for "Biltstraat, Utrecht", or anything with a number
+ * that PDOK found as an address or postcode.
+ */
+export function looksLikePlace(query: string, hit: Geocoded): boolean {
+  const q = foldText(query);
+  const label = foldText(hit.label);
+  if (label === q || label.startsWith(`${q},`)) return true;
+  return (hit.kind === "adres" || hit.kind === "postcode") && /\d/.test(q);
+}
+
 export interface SearchRequest {
-  /** A place or address to look up. */
+  /** A name, place or address to look up, normalized (see normalizeQuery). */
   query: string | null;
+  /** The same text as typed, for showing the results under. */
+  display: string | null;
   /** A place that was reported on: its surroundings are fetched again. */
   refreshPlaceId: number | null;
 }
@@ -127,8 +146,11 @@ export function parseRequest(body: unknown): SearchRequest | null {
   if (typeof body !== "object" || body === null) return null;
   const { q, refresh_place_id: refresh } = body as Record<string, unknown>;
   if (typeof refresh === "number" && Number.isSafeInteger(refresh) && refresh > 0) {
-    return { query: null, refreshPlaceId: refresh };
+    return { query: null, display: null, refreshPlaceId: refresh };
   }
   const query = normalizeQuery(q);
-  return query ? { query, refreshPlaceId: null } : null;
+  if (!query) return null;
+  // deno-lint-ignore no-control-regex
+  const display = (q as string).replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
+  return { query, display, refreshPlaceId: null };
 }

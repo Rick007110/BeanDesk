@@ -1,7 +1,6 @@
 package nl.beandesk.app.ui.places
 
 import android.content.Context
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -10,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -21,9 +21,9 @@ import nl.beandesk.app.data.location.LocationRepository
 import nl.beandesk.app.data.remote.AreaSearchSource
 import nl.beandesk.app.data.remote.NoAreaSearch
 import nl.beandesk.app.data.remote.SampleCityExportSource
+import nl.beandesk.app.data.remote.SearchResult
 import nl.beandesk.app.icon.AppIconManager
 import nl.beandesk.app.ui.theme.BeanDeskTheme
-import nl.beandesk.core.export.CityExport
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -87,22 +87,34 @@ class PlacesScreenTest {
     }
 
     @Test
-    fun searchingAPlaceShowsItsSurroundings() {
+    fun aPauseInTypingSearchesAndAnEmptyFieldGoesBack() {
+        val search = FakeSearch(context)
+        showScreen(search)
+
+        // No search key: the search starts by itself two seconds after the last letter.
+        searchField.performTextInput("Amersfoort")
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("2 plekken").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(listOf("Amersfoort"), search.queries)
+        // The text stays, and does not filter its own results.
+        searchField.assertTextEquals("Amersfoort")
+        val list = compose.onNode(hasScrollToNodeAction())
+        list.performScrollToNode(hasText("Koffie & Werk"))
+        list.performScrollToNode(hasText("Stadsbibliotheek Centrum"))
+
+        // Clearing the field shows the city again.
+        searchField.performTextClearance()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("11 plekken").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun theSearchKeySearchesAtOnce() {
         val search = FakeSearch(context)
         showScreen(search)
 
         searchField.performTextInput("Amersfoort")
         searchField.performImeAction()
-
-        // The list switches to the two places of the fake search, the field empties and "Amersfoort"
-        // shows as the area.
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("2 plekken").fetchSemanticsNodes().isNotEmpty() }
-        // On a small screen the second card is below the fold: scroll to each to check it is listed.
-        val list = compose.onNode(hasScrollToNodeAction())
-        list.performScrollToNode(hasText("Koffie & Werk"))
-        list.performScrollToNode(hasText("Stadsbibliotheek Centrum"))
-        compose.onAllNodes(hasSetTextAction() and hasText("Amersfoort")).assertCountEquals(0)
-        assertEquals(true, compose.onAllNodesWithText("Amersfoort").fetchSemanticsNodes().isNotEmpty())
+        // Well within the two-second pause.
+        compose.waitUntil(1_500) { compose.onAllNodesWithText("2 plekken").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf("Amersfoort"), search.queries)
     }
 
@@ -110,11 +122,11 @@ class PlacesScreenTest {
     private class FakeSearch(private val context: Context) : AreaSearchSource {
         val queries = mutableListOf<String>()
 
-        override suspend fun search(query: String): CityExport {
+        override suspend fun search(query: String): SearchResult {
             queries += query
             delay(300)
             val sample = SampleCityExportSource(context.assets).fetch("utrecht")
-            return sample.copy(city = "Amersfoort", places = sample.places.take(2))
+            return SearchResult(sample.copy(city = "Amersfoort", places = sample.places.take(2)), byName = false)
         }
 
         override suspend fun refreshAround(placeId: Long) = Unit

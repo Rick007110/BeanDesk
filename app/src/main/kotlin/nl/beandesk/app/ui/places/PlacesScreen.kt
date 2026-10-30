@@ -23,17 +23,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
@@ -117,7 +112,7 @@ fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
         onRetry = viewModel::refresh,
         onReport = viewModel::report,
         onSearchTextChange = viewModel::onSearchTextChange,
-        onSearchArea = viewModel::searchArea,
+        onSearchNow = viewModel::searchNow,
         onShowHomeArea = viewModel::showHomeArea,
     )
 }
@@ -128,7 +123,6 @@ private val PlacesMessage.textRes: Int
         PlacesMessage.REPORT_SAVED_LOCALLY -> R.string.report_saved_locally
         PlacesMessage.REPORT_RATE_LIMITED -> R.string.report_rate_limited
         PlacesMessage.REPORT_FAILED -> R.string.report_failed
-        PlacesMessage.SEARCH_NOT_FOUND -> R.string.search_not_found
         PlacesMessage.SEARCH_UNAVAILABLE -> R.string.search_unavailable
         PlacesMessage.SEARCH_FAILED -> R.string.search_failed
     }
@@ -151,7 +145,7 @@ private fun PlacesContent(
     onRetry: () -> Unit,
     onReport: (Report, (Boolean) -> Unit) -> Unit,
     onSearchTextChange: (String) -> Unit,
-    onSearchArea: () -> Unit,
+    onSearchNow: () -> Unit,
     onShowHomeArea: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -215,7 +209,7 @@ private fun PlacesContent(
                     text = searchText,
                     canSearchAreas = state.canSearchAreas,
                     onTextChange = onSearchTextChange,
-                    onSearch = onSearchArea,
+                    onSearch = onSearchNow,
                 )
                 FilterBar(
                     filter = state.filter,
@@ -274,6 +268,7 @@ private fun PlacesContent(
             AnimatedVisibility(state.showList, enter = fadeIn(), exit = fadeOut()) {
                 PlaceList(
                     items = state.items,
+                    areaKey = state.areaKey,
                     totalCount = state.totalCount,
                     isRefreshing = state.isRefreshing,
                     attribution = state.attribution,
@@ -282,19 +277,17 @@ private fun PlacesContent(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
-                    header = listHeader(
-                        searchText = searchText.takeIf { state.canSearchAreas && it.trim().length >= 2 },
-                        isSearching = state.isSearching,
-                        onSearchArea = onSearchArea,
-                        showLocationPrompt = !locationPromptDismissed && locationAccess != LocationAccess.PRECISE,
-                        locationPrompt = {
+                    header = if (!locationPromptDismissed && locationAccess != LocationAccess.PRECISE) {
+                        {
                             LocationPrompt(
                                 access = locationAccess,
                                 onRequest = { permissionLauncher.launch(LOCATION_PERMISSIONS) },
                                 onDismiss = { locationPromptDismissed = true },
                             )
-                        },
-                    ),
+                        }
+                    } else {
+                        null
+                    },
                 )
             }
             AnimatedVisibility(
@@ -363,8 +356,8 @@ private fun PlacesContent(
 
 
 /**
- * Typing narrows the list to matching names and addresses; the search key on the keyboard
- * looks the text up as a town or address instead.
+ * Typing narrows the list to matching names and addresses; two seconds after the last letter, or
+ * with the search key, the text is searched across the country (see PlacesViewModel).
  */
 @Composable
 private fun SearchField(
@@ -409,62 +402,6 @@ private fun SearchField(
             },
         ),
     )
-}
-
-/** What goes above the list: the offer to search the typed text as a place, and the location prompt. */
-private fun listHeader(
-    searchText: String?,
-    isSearching: Boolean,
-    onSearchArea: () -> Unit,
-    showLocationPrompt: Boolean,
-    locationPrompt: @Composable () -> Unit,
-): (@Composable () -> Unit)? {
-    if (searchText == null && !showLocationPrompt) return null
-    val header: @Composable () -> Unit = {
-        Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (searchText != null) SearchAreaCard(searchText.trim(), isSearching, onSearchArea)
-            if (showLocationPrompt) locationPrompt()
-        }
-    }
-    return header
-}
-
-@Composable
-private fun SearchAreaCard(text: String, isSearching: Boolean, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        enabled = !isSearching,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            disabledContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            disabledContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_place), contentDescription = null)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = stringResource(R.string.search_area_action, text),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = stringResource(if (isSearching) R.string.search_area_busy else R.string.search_area_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            if (isSearching) {
-                Spacer(Modifier.width(12.dp))
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            }
-        }
-    }
 }
 
 @Composable

@@ -2,7 +2,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createHandler, type Deps, MAX_CELLS, MAX_FETCHES, type Store } from "./handler.ts";
-import { type Cell, type Geocoded, labelFor, normalizeQuery, overpassQuery, parsePdok, parseRequest, pickCells } from "./lib.ts";
+import {
+  type Cell,
+  foldText,
+  type Geocoded,
+  labelFor,
+  looksLikePlace,
+  normalizeQuery,
+  overpassQuery,
+  parsePdok,
+  parseRequest,
+  pickCells,
+} from "./lib.ts";
 
 const cell = (lat_index: number, lng_index: number): Cell => ({
   lat_index,
@@ -26,8 +37,8 @@ describe("lib", () => {
   });
 
   it("accepts a query or a place to refresh, nothing else", () => {
-    assert.deepEqual(parseRequest({ q: "Utrecht" }), { query: "utrecht", refreshPlaceId: null });
-    assert.deepEqual(parseRequest({ refresh_place_id: 12 }), { query: null, refreshPlaceId: 12 });
+    assert.deepEqual(parseRequest({ q: " Bonen  & Boeken " }), { query: "bonen & boeken", display: "Bonen & Boeken", refreshPlaceId: null });
+    assert.deepEqual(parseRequest({ refresh_place_id: 12 }), { query: null, display: null, refreshPlaceId: 12 });
     assert.equal(parseRequest({ refresh_place_id: -1 }), null);
     assert.equal(parseRequest({ lat: 52, lng: 5 }), null);
     assert.equal(parseRequest(null), null);
@@ -43,6 +54,19 @@ describe("lib", () => {
     assert.equal(parsePdok(pdokAnswer({ ...AMERSFOORT, type: "gemeente" })), null);
     assert.equal(parsePdok(pdokAnswer({ ...AMERSFOORT, centroide_ll: "POINT(2.35 48.85)" })), null);
     assert.equal(parsePdok({ error: "x" }), null);
+  });
+
+  it("tells a place from the name of a cafe", () => {
+    const town: Geocoded = { label: "Amersfoort", kind: "woonplaats", lat: 52.15, lng: 5.38 };
+    const street: Geocoded = { label: "Biltstraat, Utrecht", kind: "weg", lat: 52.09, lng: 5.13 };
+    const address: Geocoded = { label: "Oudegracht 10, 3511AM Utrecht", kind: "adres", lat: 52.09, lng: 5.11 };
+    assert.ok(looksLikePlace("amersfoort", town));
+    assert.ok(looksLikePlace("biltstraat", street));
+    assert.ok(looksLikePlace("oudegracht 10 utrecht", address));
+    // PDOK finds something for almost anything; "bonen" is not "Bonenburgerweg".
+    assert.ok(!looksLikePlace("bonen", { ...street, label: "Bonenburgerweg, Ergens" }));
+    assert.ok(!looksLikePlace("starbucks", town));
+    assert.equal(foldText(" Café Été "), "cafe ete");
   });
 
   it("keeps the town of a woonplaats label", () => {
@@ -68,7 +92,17 @@ describe("lib", () => {
 });
 
 /** An in-memory Store and fetch, recording what the handler does. */
-function fakes(options: { missing?: Cell[]; fetchesSince?: number; overpass?: "ok" | "down"; pdok?: unknown; places?: unknown[] } = {}) {
+function fakes(
+  options: {
+    missing?: Cell[];
+    fetchesSince?: number;
+    overpass?: "ok" | "down";
+    pdok?: unknown;
+    pdokDown?: boolean;
+    places?: unknown[];
+    byName?: unknown[];
+  } = {},
+) {
   const log: string[] = [];
   const cache = new Map<string, Geocoded>();
   let places = options.places ?? [];
@@ -86,12 +120,14 @@ function fakes(options: { missing?: Cell[]; fetchesSince?: number; overpass?: "o
       places = elements;
     },
     areaExport: async (_lat, _lng, radius, label) => ({ version: 1, city: label, radius_m: radius, places }),
+    nameSearch: async (_query, label) => ({ version: 1, city: label, places: options.byName ?? [] }),
     placeLocation: async (id) => (id === 7 ? { lat: 52.09, lng: 5.12 } : null),
   };
   const fetchFake = (async (input: string | URL | Request) => {
     const url = String(input);
     if (url.includes("pdok")) {
       log.push(`fetch ${new URL(url).host}`);
+      if (options.pdokDown) return new Response("down", { status: 503 });
       return Response.json(options.pdok ?? pdokAnswer(AMERSFOORT));
     }
     log.push(`overpass ${new URL(url).host}`);
@@ -144,6 +180,28 @@ describe("search", () => {
     assert.equal(result.body.search.status, "partial");
     assert.equal(result.body.search.fetched_cells, MAX_CELLS);
     assert.equal(result.body.search.pending_cells, 5);
+  });
+
+  it("finds cafes by name when the text is not a place", async () => {
+    const street = { type: "weg", weergavenaam: "Starbuckslaan, Ergens", centroide_ll: "POINT(5.1 52.1)" };
+    const { call, log } = fakes({ pdok: pdokAnswer(street), byName: [{ id: 1 }, { id: 2 }] });
+    const result = await call({ q: "Starbucks" });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.city, "Starbucks");
+    assert.equal(result.body.places.length, 2);
+    assert.equal(result.body.search.kind, "naam");
+    assert.ok(!log.some((line) => line.startsWith("missing")), "no area is fetched");
+  });
+
+  it("prefers a clear place over cafes with that word in their name", async () => {
+    const { call } = fakes({ byName: [{ id: 1 }], places: [{ id: 5 }] });
+    const result = await call({ q: "Amersfoort" });
+    assert.equal(result.body.search.kind, "woonplaats");
+  });
+
+  it("still finds by name when PDOK is down", async () => {
+    assert.equal((await fakes({ pdokDown: true, byName: [{ id: 1 }] }).call({ q: "starbucks" })).status, 200);
+    assert.deepEqual(await fakes({ pdokDown: true }).call({ q: "starbucks" }), { status: 502, body: { error: "geocode_failed" } });
   });
 
   it("says nothing was found", async () => {
