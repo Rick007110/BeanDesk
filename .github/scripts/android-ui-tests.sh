@@ -12,8 +12,11 @@ status=$?
 
 mkdir -p ui-screens
 adb pull /sdcard/Download/beandesk-ui/. ui-screens/ || true
+# The system log, for a test run that ended with "Test failed with status -1" (a crash).
+adb logcat -d > ui-screens/logcat.txt || true
 
 if [ "$status" -ne 0 ]; then
   find app/build/outputs/androidTest-results -name '*.xml' -exec grep -B2 -A60 '<failure' {} +
+  adb logcat -d -b crash || true
 fi
 exit "$status"

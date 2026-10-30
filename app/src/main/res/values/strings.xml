@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">BeanDesk</string>
+    <string name="app_name" translatable="false">BeanDesk</string>
     <string name="places_title">Werkplekken</string>
 
     <string name="show_list">Lijst</string>
@@ -72,7 +72,34 @@
     <string name="source_users">volgens gebruikers</string>
     <string name="source_osm">volgens OpenStreetMap</string>
 
-    <string name="route">Route</string>
+    <string name="today">vandaag</string>
+    <string name="hours_closed">Gesloten</string>
+    <string name="hours_all_day">Hele dag open</string>
+    <string name="hours_holidays">Op feestdagen en in schoolvakanties kunnen de tijden anders zijn.</string>
+    <string name="hours_as_in_osm">Zo staat het in OpenStreetMap; de app kan deze tijden niet per dag tonen.</string>
+
+    <string name="daypart_title">Drukte per dagdeel</string>
+    <string name="daypart_morning">Ochtend</string>
+    <string name="daypart_afternoon">Middag</string>
+    <string name="daypart_evening">Avond</string>
+    <string name="daypart_weekend">Weekend</string>
+    <string name="daypart_now">nu</string>
+    <string name="daypart_no_reports">Nog geen meldingen</string>
+    <string name="daypart_note">Uit meldingen van het afgelopen jaar. Ochtend is tot 12:00, middag tot 17:00.</string>
+    <plurals name="daypart_reports">
+        <item quantity="one">%d melding</item>
+        <item quantity="other">%d meldingen</item>
+    </plurals>
+    <string name="quietness_quiet">Rustig</string>
+    <string name="quietness_mixed">Wisselend</string>
+    <string name="quietness_busy">Druk</string>
+
+    <string name="last_confirmed">Laatst bevestigd door een gebruiker op %1$s.</string>
+    <string name="stale_title">Niet recent bevestigd</string>
+    <string name="stale_body">Gebruikers meldden hier voor het laatst iets op %1$s. Klopt het nog? Laat het hieronder weten.</string>
+
+    <string name="route_bike">Fietsroute</string>
+    <string name="route_walk">Looproute</string>
     <string name="show_on_map">Op kaart</string>
     <string name="route_unavailable">Geen app gevonden om de route te openen</string>
 
@@ -119,6 +146,63 @@
     <string name="report_saved_locally">Opgeslagen op je telefoon (voorbeeldmodus).</string>
     <string name="report_rate_limited">Je hebt vandaag al veel gemeld. Probeer het morgen opnieuw.</string>
     <string name="report_failed">Versturen is mislukt. Probeer het zo opnieuw.</string>
+
+    <string name="profile_title">Profiel en instellingen</string>
+    <string name="back">Terug</string>
+    <string name="cancel">Annuleren</string>
+
+    <string name="contributions_title">Jouw meldingen</string>
+    <string name="contributions_sample_mode">Voorbeeldmodus: meldingen blijven op deze telefoon en staan daarom niet hier.</string>
+    <string name="contributions_failed">Je meldingen laden is mislukt.</string>
+    <string name="contributions_none">Je hebt nog niets gemeld. Tik bij een plek op Melden om te laten weten wat klopt.</string>
+    <plurals name="contributions_count">
+        <item quantity="one">Je hielp bij %d plek. Dank je!</item>
+        <item quantity="other">Je hielp bij %d plekken. Dank je!</item>
+    </plurals>
+    <string name="contribution_unknown_place">Plek die niet meer bestaat</string>
+    <string name="contribution_wifi_none">Geen wifi</string>
+    <string name="contribution_power_none">Geen stopcontacten</string>
+    <string name="contribution_power_few">Weinig stopcontacten</string>
+    <string name="contribution_closed">Permanent gesloten</string>
+    <plurals name="contribution_stars">
+        <item quantity="one">%d ster</item>
+        <item quantity="other">%d sterren</item>
+    </plurals>
+
+    <string name="settings_title">Instellingen</string>
+    <string name="settings_theme">Weergave</string>
+    <string name="theme_system">Zoals je telefoon</string>
+    <string name="theme_light">Licht</string>
+    <string name="theme_dark">Donker</string>
+    <string name="settings_language">Taal</string>
+    <string name="language_system">Taal van je telefoon</string>
+
+    <string name="privacy_section">Privacy</string>
+    <string name="privacy_title">Privacyverklaring</string>
+    <string name="privacy_location_title">Je locatie</string>
+    <string name="privacy_location_body">BeanDesk gebruikt je locatie alleen als je dat toestaat, en alleen terwijl je de app gebruikt. De app rekent afstanden uit op je telefoon; je locatie gaat nergens heen.</string>
+    <string name="privacy_reports_title">Meldingen en sterren</string>
+    <string name="privacy_reports_body">Bij je eerste melding maakt BeanDesk een anoniem account aan, zonder naam, e-mailadres of telefoonnummer. Je meldingen en sterren worden met dat account opgeslagen in onze database bij Supabase (in Frankfurt), zodat je ze hier terugziet en we misbruik kunnen tegengaan. Anderen zien alleen het totaal per plek, nooit wie wat meldde.</string>
+    <string name="privacy_search_title">Zoeken</string>
+    <string name="privacy_search_body">Wat je in het zoekveld typt, gaat naar onze server. Die zoekt de plaats of het adres op bij PDOK (de locatieserver van de overheid) en haalt plekken uit OpenStreetMap. Je zoekopdracht wordt niet aan je account gekoppeld.</string>
+    <string name="privacy_map_title">Kaart en route</string>
+    <string name="privacy_map_body">De kaart haalt kaartbeelden op bij OpenFreeMap; die dienst ziet daardoor je IP-adres en welk stuk kaart je bekijkt. Een route opent in Google Maps; daar geldt het privacybeleid van Google.</string>
+    <string name="privacy_delete_title">Verwijderen</string>
+    <string name="privacy_delete_body">Met Account verwijderen hieronder gaan je account, meldingen en sterren direct en definitief weg. Wat ze aan de gegevens van een plek bijdroegen, wordt dan opnieuw berekend. BeanDesk heeft geen advertenties en volgt je niet.</string>
+
+    <string name="account_anonymous">Je account is anoniem: er hangt geen naam of e-mailadres aan.</string>
+    <string name="account_none">Je hebt geen account. BeanDesk maakt er pas een aan bij je eerste melding.</string>
+    <string name="account_sample_mode">Voorbeeldmodus: er is geen account, alles blijft op deze telefoon.</string>
+    <string name="account_delete">Account verwijderen</string>
+    <string name="account_delete_title">Account verwijderen?</string>
+    <string name="account_delete_body">Je meldingen en sterren worden ook verwijderd. Dit kan niet ongedaan worden gemaakt.</string>
+    <string name="account_delete_confirm">Verwijderen</string>
+    <string name="account_deleted">Je account en meldingen zijn verwijderd.</string>
+    <string name="account_delete_failed">Verwijderen is mislukt. Controleer je internet en probeer het opnieuw.</string>
+
+    <string name="about_title">Over BeanDesk</string>
+    <string name="about_version">Versie %1$s</string>
+    <string name="about_osm">Gegevens over plekken: © OpenStreetMap-bijdragers, onder de ODbL-licentie.</string>
 
     <string name="app_icon_title">App-icoon</string>
     <string name="app_icon_hint">Je nieuwe icoon verschijnt op je startscherm en in je app-lijst zodra je de app verlaat. Staat BeanDesk op je startscherm, dan moet je hem daar op sommige telefoons opnieuw neerzetten.</string>

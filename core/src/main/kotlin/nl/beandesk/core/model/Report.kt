@@ -1,5 +1,7 @@
 package nl.beandesk.core.model
 
+import java.time.Instant
+
 /** One tap on "Klopt dit nog?": what a user says about a place right now. Null means "not reported". */
 data class Report(
     val placeId: Long,
@@ -30,16 +32,23 @@ fun Rating?.withStars(stars: Int): Rating {
 }
 
 /**
- * The community facts after [report], following the same rule as the database trigger:
- * the latest report wins per fact, and closure reports add up.
+ * The community facts after [report], made [at] in [daypart], following the same rule as the
+ * database: the latest report wins per fact, closure reports add up, and "rustig" or "druk"
+ * counts for its part of the day.
  */
-fun CommunityFacts?.withReport(report: Report): CommunityFacts {
+fun CommunityFacts?.withReport(report: Report, at: Instant, daypart: Daypart): CommunityFacts {
     val current = this ?: CommunityFacts()
+    if (!report.hasFacts) return current
+    val quietByDaypart = report.quiet?.let { quiet ->
+        current.quietByDaypart + (daypart to (current.quietByDaypart[daypart] ?: QuietCount(0, 0)).plus(quiet))
+    }
     return CommunityFacts(
         wifi = report.wifi ?: current.wifi,
         power = report.power ?: current.power,
         quiet = report.quiet ?: current.quiet,
         laptopPolicy = report.laptopPolicy ?: current.laptopPolicy,
         closedReports = current.closedReports + if (report.permanentlyClosed) 1 else 0,
+        lastReportAt = at,
+        quietByDaypart = quietByDaypart ?: current.quietByDaypart,
     )
 }

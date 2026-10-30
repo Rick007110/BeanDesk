@@ -78,10 +78,23 @@ class Finger(private val name: String) {
 
     /** Finds [selector]; when it is below the screen edge, scrolls down a little at a time. */
     fun reveal(selector: BySelector): UiObject2 {
-        repeat(5) {
+        repeat(10) {
             val node = find(selector, 1_000)
             if (node != null && node.visibleBounds.height() > 20) return node
             drag(0.7f, 0.5f)
+        }
+        return await(selector)
+    }
+
+    /**
+     * Finds [selector]; when it is above the screen edge, scrolls back up slowly: a quick pull
+     * down at the top of a sheet would close it.
+     */
+    fun revealAbove(selector: BySelector): UiObject2 {
+        repeat(10) {
+            val node = find(selector, 1_000)
+            if (node != null && node.visibleBounds.height() > 20) return node
+            drag(0.4f, 0.55f, steps = 100)
         }
         return await(selector)
     }

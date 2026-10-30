@@ -43,7 +43,6 @@ import nl.beandesk.core.geo.distanceMeters
 import nl.beandesk.core.hours.OpenStatus
 import nl.beandesk.core.hours.OpeningHours
 import nl.beandesk.core.hours.WeekTime
-import nl.beandesk.core.hours.Weekday
 import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.Report
@@ -51,7 +50,13 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.Locale
 
-data class PlaceItem(val place: Place, val status: OpenStatus, val distanceMeters: Double? = null)
+data class PlaceItem(
+    val place: Place,
+    val status: OpenStatus,
+    val distanceMeters: Double? = null,
+    // What users said is over a year old.
+    val isStale: Boolean = false,
+)
 
 data class PlacesUiState(
     // The city, or the town or address that was searched.
@@ -81,6 +86,8 @@ data class PlacesUiState(
     val isSendingReport: Boolean = false,
     // False with sample data: reports then stay on the phone.
     val sendsReports: Boolean = false,
+    // The time in the area, for today's opening hours and the current part of the day.
+    val now: ZonedDateTime? = null,
 )
 
 /** One-off messages for the snackbar. */
@@ -289,7 +296,7 @@ class PlacesViewModel(
     private fun buildState(data: AreaData, flags: UiFlags, searchText: String, location: LatLng?): PlacesUiState {
         val (current, places, info) = data
         val now = ZonedDateTime.now(ZoneId.of(info?.timezone ?: DEFAULT_TIMEZONE))
-        val at = WeekTime(Weekday.entries[now.dayOfWeek.value - 1], now.hour * 60 + now.minute)
+        val at = WeekTime.of(now)
         val visible = places.filterNot { it.isReportedClosed }
         // Around a searched place the nearest to it come first; otherwise (the city, or places found
         // by name across the country) the nearest to the user.
@@ -298,7 +305,14 @@ class PlacesViewModel(
         // most places do not have "Amersfoort" in their name.
         val filterText = if (current.query.equals(searchText.trim(), ignoreCase = true)) "" else searchText
         val items = visible
-            .map { PlaceItem(it, statusOf(it, at), location?.let { here -> distanceMeters(here, it.location) }) }
+            .map { place ->
+                PlaceItem(
+                    place = place,
+                    status = statusOf(place, at),
+                    distanceMeters = location?.let { distanceMeters(it, place.location) },
+                    isStale = place.community?.isStale(now.toInstant()) == true,
+                )
+            }
             .filter { flags.filter.matches(it.place, it.status, at) && it.place.matchesText(filterText) }
             // Open places first, then the nearest (or by name while there is nothing to measure from).
             .sortedWith(
@@ -329,6 +343,7 @@ class PlacesViewModel(
             hasError = flags.hasError,
             isSendingReport = flags.isSendingReport,
             sendsReports = repository.sendsReports,
+            now = now,
         )
     }
 

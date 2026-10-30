@@ -12,18 +12,23 @@ import nl.beandesk.app.data.remote.CityExportSource
 import nl.beandesk.app.data.remote.SupabaseBackend
 import nl.beandesk.core.export.CityExport
 import nl.beandesk.core.export.ExportedPlace
+import nl.beandesk.core.hours.WeekTime
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.CommunityFacts
+import nl.beandesk.core.model.Daypart
 import nl.beandesk.core.model.LaptopPolicy
 import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.OsmFacts
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.PowerLevel
+import nl.beandesk.core.model.QuietCount
 import nl.beandesk.core.model.Rating
 import nl.beandesk.core.model.Report
 import nl.beandesk.core.model.WifiStatus
 import nl.beandesk.core.model.withReport
 import nl.beandesk.core.model.withStars
+import java.time.Instant
+import java.time.ZoneId
 
 data class CityInfo(val label: String, val timezone: String, val attribution: String, val center: LatLng?)
 
@@ -108,7 +113,12 @@ class PlaceRepository(
     suspend fun report(report: Report) {
         backend?.sendReport(report)
         val place = dao.place(report.placeId)?.toPlace() ?: return
-        if (report.hasFacts) setCommunity(report.placeId, place.community.withReport(report))
+        if (report.hasFacts) {
+            // The database counts the part of the day in Dutch time too.
+            val now = Instant.now()
+            val daypart = Daypart.of(WeekTime.of(now.atZone(DUTCH_TIME)))
+            setCommunity(report.placeId, place.community.withReport(report, now, daypart))
+        }
         report.stars?.let { stars ->
             val rating = place.rating.withStars(stars)
             dao.setRating(report.placeId, rating.average, rating.count)
@@ -136,11 +146,14 @@ class PlaceRepository(
         quiet = facts.quiet,
         laptopPolicy = facts.laptopPolicy?.name,
         closedReports = facts.closedReports,
+        lastReportAt = facts.lastReportAt?.toEpochMilli(),
+        dayparts = encodeDayparts(facts.quietByDaypart),
     )
 }
 
 private const val TAG = "PlaceRepository"
 private const val SEARCH_PREFIX = "zoek:"
+private val DUTCH_TIME = ZoneId.of("Europe/Amsterdam")
 
 // Searched areas stay on the phone for offline use; the oldest go once there are more.
 private const val KEPT_SEARCHES = 10
@@ -165,6 +178,8 @@ private fun ExportedPlace.toEntity(city: String): PlaceEntity {
         communityQuiet = community?.quiet,
         communityLaptopPolicy = community?.laptopPolicy?.name,
         closedReports = community?.closedReports ?: 0,
+        lastReportAt = community?.lastReportAt?.toEpochMilli(),
+        communityDayparts = community?.let { encodeDayparts(it.quietByDaypart) },
         ratingAverage = place.rating?.average,
         ratingCount = place.rating?.count ?: 0,
         updatedAt = updatedAt,
@@ -190,8 +205,23 @@ private fun PlaceEntity.toPlace(): Place? {
                 quiet = communityQuiet,
                 laptopPolicy = LaptopPolicy.entries.firstOrNull { it.name == communityLaptopPolicy },
                 closedReports = closedReports,
+                lastReportAt = lastReportAt?.let(Instant::ofEpochMilli),
+                quietByDaypart = decodeDayparts(communityDayparts),
             )
         },
         rating = ratingAverage?.takeIf { ratingCount > 0 }?.let { Rating(it, ratingCount) },
     )
 }
+
+/** "MORNING:3:0,WEEKEND:0:2"; null without any. */
+private fun encodeDayparts(counts: Map<Daypart, QuietCount>): String? =
+    counts.entries.takeIf { it.isNotEmpty() }?.joinToString(",") { (part, count) -> "${part.name}:${count.quiet}:${count.busy}" }
+
+private fun decodeDayparts(text: String?): Map<Daypart, QuietCount> =
+    text.orEmpty().split(',').mapNotNull { entry ->
+        val parts = entry.split(':')
+        val daypart = Daypart.entries.firstOrNull { it.name == parts[0] } ?: return@mapNotNull null
+        val quiet = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+        val busy = parts.getOrNull(2)?.toIntOrNull() ?: return@mapNotNull null
+        daypart to QuietCount(quiet, busy)
+    }.toMap()

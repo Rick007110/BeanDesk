@@ -65,6 +65,8 @@ supabase functions deploy search
 
 Migratie `20261030000000_search_areas` is via de SQL-editor in het dashboard gedraaid. Hij staat daarom niet in de migratiegeschiedenis van het project; `supabase db push` probeert hem dan opnieuw, en dat mislukt omdat de tabellen al bestaan. Markeer hem één keer als gedaan met `supabase migration repair --status applied 20261030000000`.
 
+Voor `20261030160000_dayparts_and_account_deletion` geldt hetzelfde als je hem in de SQL-editor plakt: markeer hem daarna met `supabase migration repair --status applied 20261030160000`. Zonder deze migratie blijft "drukte per dagdeel" leeg en mislukt "account verwijderen" in de app met een foutmelding.
+
 Anoniem inloggen moet aan staan (Authentication → Sign In / Providers → "Allow anonymous sign-ins"); daarzonder werkt het melden niet. In `supabase/config.toml` staat het voor lokaal gebruik al aan.
 
 Handige SQL in de SQL-editor:
@@ -138,9 +140,13 @@ node --test supabase/functions/search/search.test.ts
 
 ## Keuzes die afwijken van het plan of het aanvullen
 
-- **Openingstijden:** OpeningHoursParser kan alleen parsen, niet bepalen of een zaak open is. Daarom staat er een eigen evaluator in `core`, zonder Java-afhankelijkheid. Die snapt de gangbare vormen (dagen, tijden, over middernacht, `off`, `24/7`) en negeert feestdagen. Alles daarbuiten toont de app als "onbekend".
+- **Openingstijden:** OpeningHoursParser kan alleen parsen, niet bepalen of een zaak open is. Daarom staat er een eigen evaluator in `core`, zonder Java-afhankelijkheid. Die snapt de gangbare vormen (dagen, tijden, over middernacht, `off`, `24/7`) en negeert feestdagen. Alles daarbuiten toont de app als "onbekend". Op de plek staat de hele week, met vandaag gemarkeerd; noemt de tekst feestdagen of schoolvakanties, dan staat er een opmerking onder. Tijden die de app niet kan lezen, toont hij zoals ze in OpenStreetMap staan.
 - **Namen:** de tabellen heten `places` en `place_reports` in plaats van `cafes`, omdat ook bibliotheken en coworkingruimtes meedoen. Kolomnamen zijn Engels.
-- **Meldingen:** wat gebruikers melden staat in `place_community`, los van de OSM-data, en wordt door een trigger bijgewerkt. Nu wint de laatste melding; in fase 2 komt de gewogen laptop-score.
+- **Meldingen:** wat gebruikers melden staat in `place_community`, los van de OSM-data, en wordt door een trigger bijgewerkt. Per feit wint de laatste melding; in fase 2 komt de gewogen laptop-score. Verdwijnt een melding (bijvoorbeeld met een account), dan rekent de trigger de plek opnieuw uit.
+- **Drukte per dagdeel:** "rustig" en "druk" tellen ook per dagdeel, in Nederlandse tijd: ochtend tot 12:00, middag tot 17:00, avond, en zaterdag en zondag samen als weekend. Alleen meldingen van de laatste twaalf maanden tellen. Twee op de drie bepalen of een dagdeel rustig of druk is, anders is het wisselend. Het staat in `place_community.quiet_by_daypart`, omdat de export als anon draait en `place_reports` niet mag lezen.
+- **Niet recent bevestigd:** is de laatste melding over een plek ouder dan een jaar, dan staat "Niet recent bevestigd" op de kaart in de lijst en op de plek, met de datum.
+- **Profiel:** via het poppetje rechtsboven. Daar staan je eigen meldingen en sterren (de database laat je alleen je eigen rijen lezen), weergave (licht, donker of zoals de telefoon), taal, het app-icoon, de privacyverklaring en "account verwijderen". Dat laatste roept `delete_my_account()` aan; meldingen en sterren gaan mee (`on delete cascade`).
+- **Taal:** Nederlands en Engels. Standaard volgt de app de taal van de telefoon. Vanaf Android 13 bewaart Android de keuze (en staat hij ook in de Android-instellingen van de app); op oudere versies doet de app dat zelf. De tests zetten de app op Nederlands, ook op de Engelse emulator in CI.
 - **Misbruik:** gebruikers kunnen `trust_score`, `user_id` en `reported_at` niet zelf zetten. Er geldt een daglimiet: 20 meldingen voor anonieme accounts en 60 voor gewone. Dat zijn startwaarden.
 - **Locatie:** de app vraagt de locatie pas na een korte uitleg bovenaan de lijst, en alleen tijdens gebruik. Een globale locatie (Android 12+) werkt ook; de app legt dan uit waarom een precieze beter is. De locatie gaat nergens heen: de app sorteert en rekent afstanden op de telefoon uit.
 - **Melden:** de eerste melding maakt via Supabase een anoniem account aan (supabase-kt); daarna gaan meldingen rechtstreeks naar `place_reports`. De app past een melding meteen op de telefoon toe, en bij het volgende verversen staat hij bij iedereen.
@@ -154,11 +160,42 @@ node --test supabase/functions/search/search.test.ts
 - [x] Snel melden: anoniem inloggen (supabase-kt) en het meldscherm
 - [x] Supabase-project met de zaken van Utrecht en een wekelijkse import
 - [ ] Delta-sync: alleen gewijzigde zaken ophalen in plaats van de hele export
-- [ ] Detailpagina met openingstijden per dag
+- [x] Detailpagina met openingstijden per dag
 - [x] Zoeken op naam, plaats, adres of postcode, met opslag van nieuwe gebieden in de database
 - [ ] Overpass: de openbare servers zitten vaak vol. Bij veel gebruikers een eigen Overpass-instantie of een betaalde dienst
 - [ ] Tegelprovider kiezen en de kaartstijl instellen
 - [ ] CAPTCHA (hCaptcha of Turnstile) bij anoniem inloggen, vóór de launch; tijdens het testen staat CAPTCHA-bescherming in Supabase uit
 - [ ] Opruimen van oude anonieme accounts zonder meldingen
-- [ ] Privacyverklaring en "account verwijderen" in de app
+- [x] Privacyverklaring en "account verwijderen" in de app (laat de privacyverklaring vóór de launch nog nakijken en zet er een contactadres in)
 - [ ] Seeding: 30-50 zaken in een of twee buurten
+
+## Ideeën voor later
+
+Door Rick gekozen uit voorstellen; nog niet gebouwd.
+
+**Melden**
+- [ ] Wifi-snelheid meten bij een melding (download in Mbit/s, tegen onze eigen server)
+- [ ] Rust meten: 5 seconden het geluidsniveau meten (alleen het getal in decibel gaat mee)
+- [ ] Geschikt om te bellen: vraag bij melden en een filter "Bellen kan"
+- [ ] Laptopregels: tijdslimiet, minimale besteding, laptopvrije tafels of uren
+- [ ] Toilet en eten: vragen bij melden en filters
+- [ ] Prijs van een cappuccino, en filteren op goedkoop
+- [ ] Openingstijden corrigeren: de gemelde tijden gaan voor die uit OpenStreetMap
+- [ ] Met een groep: grote tafels melden, en een filter "Voor groepen"
+- [ ] Melden zonder internet: de melding wacht en gaat vanzelf als je weer online bent
+- [ ] Nieuwe plek voorstellen (naam, plek op de kaart, soort), zichtbaar na controle
+
+**Vinden**
+- [ ] Filters "Open na 18:00" en "Open op zondag"
+- [ ] Sorteren op afstand, sterren of langst open
+- [ ] Reistijd in de lijst ("6 min fietsen · 15 min lopen"), uit de afstand
+- [ ] Recente zoekopdrachten onder de zoekbalk
+- [ ] Startpunt: de stad waar je bent, in plaats van altijd Utrecht; een eigen stad kiezen kan ook
+- [ ] Rustiger kaart: gesloten plekken grijs, markers samengevoegd bij uitzoomen
+
+**Erbij**
+- [ ] Plek delen (naam, adres en kaartlink) via WhatsApp, Signal en dergelijke
+- [ ] Widget: dichtstbijzijnde open plek met wifi
+- [ ] Sluitingswaarschuwing: na "Ik werk hier" een melding 30 minuten voor sluitingstijd
+- [ ] Bijdrage-teller in je profiel: hoeveel plekken je bijwerkte
+- [ ] Snelkoppelingen op het app-icoon: "Dichtstbij open" en "Zoeken"

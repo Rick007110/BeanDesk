@@ -1,16 +1,19 @@
 package nl.beandesk.app.ui.places
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -26,18 +29,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import nl.beandesk.app.R
+import nl.beandesk.core.hours.WeekTime
+import nl.beandesk.core.model.Daypart
+import nl.beandesk.core.route.TravelMode
+import java.time.ZonedDateTime
 
-/** Details of one place, sliding up over the list or the map. */
+/** Details of one place, sliding up over the list or the map. [now] is the time in the place's area. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlaceDetailSheet(
     item: PlaceItem,
+    now: ZonedDateTime?,
     showMapButton: Boolean,
     onDismiss: () -> Unit,
-    onRoute: () -> Unit,
+    onRoute: (TravelMode) -> Unit,
     onShowOnMap: () -> Unit,
     onReport: () -> Unit,
 ) {
     val place = item.place
+    val weekTime = now?.let(WeekTime::of)
     BottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -66,8 +76,15 @@ fun PlaceDetailSheet(
             RatingStars(place.rating, starSize = 20.dp)
             StatusLine(item.status)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onRoute) { Text(stringResource(R.string.route)) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onRoute(TravelMode.BICYCLING) }, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
+                    ButtonIcon(R.drawable.ic_bike)
+                    Text(stringResource(R.string.route_bike))
+                }
+                OutlinedButton(onClick = { onRoute(TravelMode.WALKING) }, contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
+                    ButtonIcon(R.drawable.ic_walk)
+                    Text(stringResource(R.string.route_walk))
+                }
                 if (showMapButton) {
                     OutlinedButton(onClick = onShowOnMap) { Text(stringResource(R.string.show_on_map)) }
                 }
@@ -79,12 +96,15 @@ fun PlaceDetailSheet(
             FactRow(R.drawable.ic_power, R.string.fact_label_power, powerFact(place))
             FactRow(R.drawable.ic_laptop, R.string.fact_label_laptop, laptopFact(place))
             FactRow(R.drawable.ic_quiet, R.string.fact_label_quiet, quietFact(place))
-            FactRow(
-                iconRes = R.drawable.ic_schedule,
-                labelRes = R.string.fact_label_hours,
-                value = place.openingHours ?: stringResource(R.string.fact_unknown),
-                source = null,
-            )
+            LastConfirmed(place.community, item.isStale)
+
+            place.community?.quietByDaypart?.takeIf { it.isNotEmpty() }?.let { counts ->
+                HorizontalDivider()
+                DaypartQuietness(counts, current = weekTime?.let(Daypart::of))
+            }
+
+            HorizontalDivider()
+            WeekHours(place.openingHours, today = weekTime?.day)
 
             HorizontalDivider()
 
@@ -107,6 +127,12 @@ fun PlaceDetailSheet(
             }
         }
     }
+}
+
+@Composable
+private fun ButtonIcon(iconRes: Int) {
+    Icon(painterResource(iconRes), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
 }
 
 @Composable

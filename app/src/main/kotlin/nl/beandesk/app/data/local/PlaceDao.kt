@@ -23,7 +23,8 @@ abstract class PlaceDao {
     @Query(
         """
         UPDATE places SET hasCommunity = 1, communityWifi = :wifi, communityPower = :power,
-            communityQuiet = :quiet, communityLaptopPolicy = :laptopPolicy, closedReports = :closedReports
+            communityQuiet = :quiet, communityLaptopPolicy = :laptopPolicy, closedReports = :closedReports,
+            lastReportAt = :lastReportAt, communityDayparts = :dayparts
         WHERE id = :id
         """,
     )
@@ -34,6 +35,8 @@ abstract class PlaceDao {
         quiet: Boolean?,
         laptopPolicy: String?,
         closedReports: Int,
+        lastReportAt: Long?,
+        dayparts: String?,
     )
 
     /** Swaps in a complete city export in one transaction, so the UI never sees half a city. */

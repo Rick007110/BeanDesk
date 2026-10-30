@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -81,17 +82,20 @@ import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.Report
 import nl.beandesk.core.route.RouteLinks
+import nl.beandesk.core.route.TravelMode
 
 @Composable
-fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
+fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager, onOpenProfile: () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // The icon can be changed in the profile.
     var appIcon by remember { mutableStateOf(appIconManager.selected()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { appIcon = appIconManager.selected() }
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
+    val resources = LocalResources.current
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
-            snackbarHostState.showSnackbar(context.getString(message.textRes))
+            snackbarHostState.showSnackbar(resources.getString(message.textRes))
         }
     }
 
@@ -100,10 +104,7 @@ fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
         searchText = viewModel.searchText,
         snackbarHostState = snackbarHostState,
         appIcon = appIcon,
-        onAppIconChange = { icon ->
-            appIconManager.select(icon)
-            appIcon = icon
-        },
+        onOpenProfile = onOpenProfile,
         onLocationGranted = viewModel::setLocationGranted,
         onFilterChange = viewModel::setFilter,
         onClearFilters = viewModel::clearFilters,
@@ -136,7 +137,7 @@ private fun PlacesContent(
     searchText: String,
     snackbarHostState: SnackbarHostState,
     appIcon: AppIcon,
-    onAppIconChange: (AppIcon) -> Unit,
+    onOpenProfile: () -> Unit,
     onLocationGranted: (Boolean) -> Unit,
     onFilterChange: (PlaceFilter) -> Unit,
     onClearFilters: () -> Unit,
@@ -156,7 +157,6 @@ private fun PlacesContent(
         focusManager.clearFocus()
         onSelect(id)
     }
-    var showIconSheet by rememberSaveable { mutableStateOf(false) }
     var reportPlaceId by rememberSaveable { mutableStateOf<Long?>(null) }
     var recenterRequests by rememberSaveable { mutableIntStateOf(0) }
 
@@ -204,10 +204,10 @@ private fun PlacesContent(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showIconSheet = true }) {
+                        IconButton(onClick = onOpenProfile) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_palette),
-                                contentDescription = stringResource(R.string.app_icon_title),
+                                painter = painterResource(R.drawable.ic_account),
+                                contentDescription = stringResource(R.string.profile_title),
                             )
                         }
                     },
@@ -329,9 +329,10 @@ private fun PlacesContent(
     if (selected != null) {
         PlaceDetailSheet(
             item = selected,
+            now = state.now,
             showMapButton = state.showList,
             onDismiss = { onSelect(null) },
-            onRoute = { openRoute(context, selected.place) },
+            onRoute = { mode -> openRoute(context, selected.place, mode) },
             onShowOnMap = { onShowOnMap(selected.place.id) },
             onReport = { reportPlaceId = selected.place.id },
         )
@@ -352,14 +353,6 @@ private fun PlacesContent(
                 onDismiss = { reportPlaceId = null },
             )
         }
-    }
-
-    if (showIconSheet) {
-        AppIconSheet(
-            selected = appIcon,
-            onSelect = onAppIconChange,
-            onDismiss = { showIconSheet = false },
-        )
     }
 }
 
@@ -491,8 +484,8 @@ private fun ErrorBanner(onRetry: () -> Unit) {
     }
 }
 
-private fun openRoute(context: Context, place: Place) {
-    val intent = Intent(Intent.ACTION_VIEW, RouteLinks.googleMaps(place.location).toUri())
+private fun openRoute(context: Context, place: Place, mode: TravelMode) {
+    val intent = Intent(Intent.ACTION_VIEW, RouteLinks.googleMaps(place.location, mode).toUri())
     try {
         context.startActivity(intent)
     } catch (e: ActivityNotFoundException) {

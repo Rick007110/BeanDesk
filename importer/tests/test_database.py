@@ -555,3 +555,119 @@ def test_find_by_name_near_a_point_is_nearest_first(conn):
     found = find_by_name(conn, "coffee company", near=(52.096, 5.12, 2000))
     assert [p["osm_id"] for p in found["places"]] == [2, 1]
     assert found["center"] == {"lat": 52.096, "lng": 5.12}
+
+
+# --- Parts of the day, removed reports, deleting an account -------------------------------
+
+def report_at(conn, reporter: uuid.UUID, target_place: int, moment_sql: str, **columns):
+    """A report at a given moment; only the database itself may set reported_at."""
+    names = ["place_id", "user_id", "reported_at", *columns]
+    conn.execute(
+        f"insert into public.place_reports ({', '.join(names)}) values (%s, %s, {moment_sql}, "
+        + ", ".join(["%s"] * len(columns)) + ")",
+        [target_place, reporter, *columns.values()],
+    )
+
+
+# Last week's Monday, Dutch time; the parts of the day are counted in Dutch time.
+LAST_MONDAY = "(date_trunc('week', now() at time zone 'Europe/Amsterdam') - interval '7 days')"
+
+
+def dutch(offset: str) -> str:
+    return f"(({LAST_MONDAY} + interval '{offset}') at time zone 'Europe/Amsterdam')"
+
+
+def test_quiet_reports_count_per_part_of_the_day(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    user = create_user(conn)
+
+    report_at(conn, user, cafe, dutch("1 day 08:30"), quiet=True)  # Tuesday morning
+    report_at(conn, user, cafe, dutch("1 day 09:45"), quiet=True)
+    report_at(conn, user, cafe, dutch("1 day 13:30"), quiet=False)  # Tuesday afternoon
+    report_at(conn, user, cafe, dutch("2 days 17:00"), quiet=True)  # Wednesday evening
+    report_at(conn, user, cafe, dutch("5 days 11:00"), quiet=False)  # Saturday
+    report_at(conn, user, cafe, dutch("6 days 20:00"), quiet=False)  # Sunday evening: weekend
+    report_at(conn, user, cafe, dutch("1 day 08:00"), wifi="fast")  # no quiet: not counted
+    report_at(conn, user, cafe, "now() - interval '13 months'", quiet=True)  # too old
+
+    expected = {
+        "morning": {"quiet": 2, "busy": 0},
+        "afternoon": {"quiet": 0, "busy": 1},
+        "evening": {"quiet": 1, "busy": 0},
+        "weekend": {"quiet": 0, "busy": 2},
+    }
+    stored = conn.execute("select quiet_by_daypart from public.place_community where place_id = %s", (cafe,)).fetchone()[0]
+    assert stored == expected
+    exported = {p["osm_id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    assert exported[1001]["community"]["quiet_by_daypart"] == expected
+
+
+def test_a_place_without_quiet_reports_has_no_parts_of_the_day(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    report_as(conn, create_user(conn), place_id(conn, 1001), wifi="fast")
+    exported = {p["osm_id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    assert exported[1001]["community"]["quiet_by_daypart"] is None
+
+
+def test_removing_reports_recomputes_what_users_say(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    first, second = create_user(conn), create_user(conn)
+    report_at(conn, first, cafe, "now() - interval '2 days'", wifi="fast", quiet=True)
+    report_at(conn, second, cafe, "now() - interval '1 day'", wifi="slow", permanently_closed=True)
+
+    def community():
+        return conn.execute(
+            "select wifi::text, quiet, closed_reports from public.place_community where place_id = %s", (cafe,)
+        ).fetchone()
+
+    assert community() == ("slow", True, 1)
+    conn.execute("delete from public.place_reports where user_id = %s", (second,))
+    assert community() == ("fast", True, 0)
+    conn.execute("delete from public.place_reports where user_id = %s", (first,))
+    assert community() is None
+    exported = {p["osm_id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    assert exported[1001]["community"] is None
+
+
+def as_user(conn, user: uuid.UUID | None):
+    conn.execute("set local role authenticated")
+    claims = {"sub": str(user)} if user else {}
+    conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps(claims),))
+
+
+def test_users_delete_their_own_account_with_its_reports_and_stars(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    leaving, staying = create_user(conn), create_user(conn)
+    report_at(conn, staying, cafe, "now() - interval '2 days'", wifi="fast")
+    report_at(conn, leaving, cafe, "now() - interval '1 day'", wifi="none")
+    rate_as(conn, staying, cafe, 4)
+    rate_as(conn, leaving, cafe, 1)
+
+    with conn.transaction():
+        as_user(conn, leaving)
+        conn.execute("select public.delete_my_account()")
+
+    assert conn.execute("select count(*) from auth.users where id = %s", (leaving,)).fetchone()[0] == 0
+    assert conn.execute("select count(*) from public.place_reports where user_id = %s", (leaving,)).fetchone()[0] == 0
+    assert conn.execute("select count(*) from public.profiles where id = %s", (leaving,)).fetchone()[0] == 0
+    exported = {p["osm_id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    assert exported[1001]["community"]["wifi"] == "fast"
+    assert exported[1001]["rating"] == {"average": 4.0, "count": 1}
+    assert conn.execute("select count(*) from auth.users where id = %s", (staying,)).fetchone()[0] == 1
+
+
+def test_only_a_signed_in_user_can_delete_an_account_and_only_their_own(conn):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute("set local role anon")
+        conn.execute("select public.delete_my_account()")
+
+    with pytest.raises(psycopg.errors.InvalidAuthorizationSpecification), conn.transaction():
+        as_user(conn, None)
+        conn.execute("select public.delete_my_account()")
+
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        as_user(conn, create_user(conn))
+        conn.execute("select public.recompute_place_community(1)")

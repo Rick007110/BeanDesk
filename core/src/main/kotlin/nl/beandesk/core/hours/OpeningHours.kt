@@ -1,5 +1,7 @@
 package nl.beandesk.core.hours
 
+import java.time.ZonedDateTime
+
 enum class Weekday { MO, TU, WE, TH, FR, SA, SU }
 
 /** A moment in the week, in the place's local time. */
@@ -9,6 +11,11 @@ data class WeekTime(val day: Weekday, val minuteOfDay: Int) {
     }
 
     internal val minuteOfWeek: Int get() = day.ordinal * MINUTES_PER_DAY + minuteOfDay
+
+    companion object {
+        /** [at] as a moment in the week, in its own time zone. */
+        fun of(at: ZonedDateTime): WeekTime = WeekTime(Weekday.entries[at.dayOfWeek.value - 1], at.hour * 60 + at.minute)
+    }
 }
 
 sealed interface OpenStatus {
@@ -22,6 +29,19 @@ sealed interface OpenStatus {
     data object Unknown : OpenStatus
 }
 
+/** A time span in minutes, half-open: from [start] up to [end]. */
+data class TimeSpan(val start: Int, val end: Int)
+
+/**
+ * The hours of one weekday as written for that day, in minutes since its midnight; an end past
+ * 24:00 runs into the next day (20:00-02:00). No spans means closed.
+ */
+data class DayHours(val day: Weekday, val spans: List<TimeSpan>) {
+    val isClosed: Boolean get() = spans.isEmpty()
+
+    val isAllDay: Boolean get() = spans.singleOrNull()?.let { it.start == 0 && it.end >= MINUTES_PER_DAY } == true
+}
+
 /**
  * Evaluates the common subset of the OSM `opening_hours` syntax:
  * weekday ranges and lists, time spans (also past midnight), `off`/`closed` and `24/7`.
@@ -30,7 +50,11 @@ sealed interface OpenStatus {
  */
 class OpeningHours private constructor(
     // Merged, sorted, non-overlapping spans in minutes since Monday 00:00.
-    private val spans: List<Span>,
+    private val spans: List<TimeSpan>,
+    /** Monday to Sunday, for a table of the week. */
+    val week: List<DayHours>,
+    /** Whether the text has rules for holidays, which [status] and [week] leave out. */
+    val mentionsHolidays: Boolean,
 ) {
     fun status(at: WeekTime): OpenStatus {
         if (spans.isEmpty()) return OpenStatus.Closed(null)
@@ -56,25 +80,26 @@ class OpeningHours private constructor(
         return OpenStatus.Closed(minutes)
     }
 
-    /** Half-open interval [start, end) in minutes. */
-    private data class Span(val start: Int, val end: Int)
-
     companion object {
         private val DAY_TOKENS = listOf("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
         private val HOLIDAY_TOKENS = setOf("PH", "SH")
         private val DAY_PART = Regex("^(Mo|Tu|We|Th|Fr|Sa|Su|PH|SH)(-(Mo|Tu|We|Th|Fr|Sa|Su))?$")
         private val TIME_SPAN = Regex("^(\\d{1,2}):(\\d{2})-(\\d{1,2}):(\\d{2})$")
         private val WHITESPACE = Regex("\\s+")
+        private val HOLIDAYS = Regex("\\b(PH|SH)\\b")
 
         fun parse(raw: String?): OpeningHours? {
             val text = raw?.trim().orEmpty()
             if (text.isEmpty()) return null
-            if (text == "24/7") return OpeningHours(listOf(Span(0, MINUTES_PER_WEEK)))
+            if (text == "24/7") {
+                val week = Weekday.entries.map { DayHours(it, listOf(TimeSpan(0, MINUTES_PER_DAY))) }
+                return OpeningHours(listOf(TimeSpan(0, MINUTES_PER_WEEK)), week, mentionsHolidays = false)
+            }
             if ("||" in text || '"' in text) return null
 
             // Per weekday the spans in minutes since that day's midnight (the end may pass 24:00).
             // A day no rule mentions stays null, which OSM treats as closed.
-            val days = arrayOfNulls<List<Span>>(Weekday.entries.size)
+            val days = arrayOfNulls<List<TimeSpan>>(Weekday.entries.size)
             var anyRule = false
             for (rule in text.split(';').map { it.trim() }.filter { it.isNotEmpty() }) {
                 val applied = applyRule(rule, days) ?: return null
@@ -88,15 +113,16 @@ class OpeningHours private constructor(
                         val start = index * MINUTES_PER_DAY + span.start
                         val end = index * MINUTES_PER_DAY + span.end
                         if (end > MINUTES_PER_WEEK) {
-                            add(Span(start, MINUTES_PER_WEEK))
-                            add(Span(0, end - MINUTES_PER_WEEK))
+                            add(TimeSpan(start, MINUTES_PER_WEEK))
+                            add(TimeSpan(0, end - MINUTES_PER_WEEK))
                         } else {
-                            add(Span(start, end))
+                            add(TimeSpan(start, end))
                         }
                     }
                 }
             }
-            return OpeningHours(merge(weekSpans))
+            val week = Weekday.entries.map { DayHours(it, days[it.ordinal].orEmpty()) }
+            return OpeningHours(merge(weekSpans), week, HOLIDAYS.containsMatchIn(text))
         }
 
         /**
@@ -104,7 +130,7 @@ class OpeningHours private constructor(
          * Returns true when it set any weekday, false when it only concerned holidays,
          * and null when the syntax is unsupported.
          */
-        private fun applyRule(rule: String, days: Array<List<Span>?>): Boolean? {
+        private fun applyRule(rule: String, days: Array<List<TimeSpan>?>): Boolean? {
             val tokens = rule.split(WHITESPACE)
             val selector = parseDays(tokens.first())
             val selected: Set<Int>
@@ -143,8 +169,8 @@ class OpeningHours private constructor(
             return result
         }
 
-        private fun parseTimes(tokens: List<String>): List<Span>? {
-            if (tokens.isEmpty()) return listOf(Span(0, MINUTES_PER_DAY)) // "Mo-Fr" alone means all day.
+        private fun parseTimes(tokens: List<String>): List<TimeSpan>? {
+            if (tokens.isEmpty()) return listOf(TimeSpan(0, MINUTES_PER_DAY)) // "Mo-Fr" alone means all day.
             val joined = tokens.joinToString("")
             if (joined.equals("off", ignoreCase = true) || joined.equals("closed", ignoreCase = true)) {
                 return emptyList()
@@ -152,7 +178,7 @@ class OpeningHours private constructor(
             return joined.split(',').map { parseSpan(it) ?: return null }
         }
 
-        private fun parseSpan(text: String): Span? {
+        private fun parseSpan(text: String): TimeSpan? {
             val match = TIME_SPAN.matchEntire(text) ?: return null
             val (h1, m1, h2, m2) = match.destructured.toList().map { it.toInt() }
             if (h1 > 23 || m1 > 59 || h2 > 48 || m2 > 59) return null
@@ -161,15 +187,15 @@ class OpeningHours private constructor(
             if (end == start) return null
             if (end < start) end += MINUTES_PER_DAY // 20:00-02:00 runs into the next day.
             if (end > 2 * MINUTES_PER_DAY) return null
-            return Span(start, end)
+            return TimeSpan(start, end)
         }
 
-        private fun merge(spans: List<Span>): List<Span> {
-            val merged = mutableListOf<Span>()
+        private fun merge(spans: List<TimeSpan>): List<TimeSpan> {
+            val merged = mutableListOf<TimeSpan>()
             for (span in spans.sortedBy { it.start }) {
                 val previous = merged.lastOrNull()
                 if (previous != null && span.start <= previous.end) {
-                    merged[merged.lastIndex] = Span(previous.start, maxOf(previous.end, span.end))
+                    merged[merged.lastIndex] = TimeSpan(previous.start, maxOf(previous.end, span.end))
                 } else {
                     merged += span
                 }

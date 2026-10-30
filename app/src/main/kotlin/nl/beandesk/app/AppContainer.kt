@@ -16,6 +16,7 @@ import nl.beandesk.app.data.remote.NoAreaSearch
 import nl.beandesk.app.data.remote.SampleCityExportSource
 import nl.beandesk.app.data.remote.SupabaseBackend
 import nl.beandesk.app.icon.AppIconManager
+import nl.beandesk.app.settings.AppSettings
 
 /** Manual dependency injection; small enough that a DI framework is not worth it yet. */
 class AppContainer(context: Context) {
@@ -47,7 +48,7 @@ class AppContainer(context: Context) {
         }
 
     // Sample places do not exist in the database, so reports about them stay on the phone.
-    private val backend: SupabaseBackend? =
+    val backend: SupabaseBackend? =
         if (!BuildConfig.USE_SAMPLE_DATA && BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()) {
             SupabaseBackend(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
         } else {
@@ -64,4 +65,6 @@ class AppContainer(context: Context) {
     val locationRepository = LocationRepository(context)
 
     val appIconManager = AppIconManager(context)
+
+    val settings = AppSettings(context)
 }

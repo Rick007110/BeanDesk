@@ -5,13 +5,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.CommunityFacts
+import nl.beandesk.core.model.Daypart
 import nl.beandesk.core.model.LaptopPolicy
 import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.OsmFacts
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.PowerLevel
+import nl.beandesk.core.model.QuietCount
 import nl.beandesk.core.model.Rating
 import nl.beandesk.core.model.WifiStatus
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 
 /** All places of one city, as written by the import script (`importer/beandesk_import/export.py`). */
 data class CityExport(
@@ -65,11 +70,22 @@ object CityExportParser {
                     quiet = it.quiet,
                     laptopPolicy = enumOrNull<LaptopPolicy>(it.laptopPolicy),
                     closedReports = it.closedReports,
+                    lastReportAt = it.lastReportAt?.let(::instantOrNull),
+                    quietByDaypart = it.quietByDaypart.orEmpty()
+                        .mapNotNull { (part, count) -> enumOrNull<Daypart>(part)?.let { daypart -> daypart to QuietCount(count.quiet, count.busy) } }
+                        .toMap(),
                 )
             },
             rating = rating?.takeIf { it.count > 0 }?.let { Rating(it.average, it.count) },
         )
         return ExportedPlace(place, updatedAt)
+    }
+
+    /** A timestamp as Postgres writes it in JSON, such as "2026-10-28T10:12:00.5+00:00". */
+    private fun instantOrNull(text: String): Instant? = try {
+        OffsetDateTime.parse(text).toInstant()
+    } catch (e: DateTimeParseException) {
+        null
     }
 
     /** Export values are the lowercase enum names, e.g. "not_on_weekends". */
@@ -123,4 +139,9 @@ private data class CommunityDto(
     val quiet: Boolean? = null,
     @SerialName("laptop_policy") val laptopPolicy: String? = null,
     @SerialName("closed_reports") val closedReports: Int = 0,
+    @SerialName("last_report_at") val lastReportAt: String? = null,
+    @SerialName("quiet_by_daypart") val quietByDaypart: Map<String, QuietCountDto>? = null,
 )
+
+@Serializable
+private data class QuietCountDto(val quiet: Int = 0, val busy: Int = 0)

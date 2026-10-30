@@ -28,6 +28,10 @@ data class PlaceEntity(
     val communityQuiet: Boolean?,
     val communityLaptopPolicy: String?,
     val closedReports: Int,
+    // Milliseconds since 1970; null when unknown.
+    val lastReportAt: Long?,
+    // "MORNING:3:0,WEEKEND:0:2": quiet and busy reports per part of the day (see PlaceRepository).
+    val communityDayparts: String?,
     // Stars from users; null average without ratings.
     val ratingAverage: Double?,
     val ratingCount: Int,
