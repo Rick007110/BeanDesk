@@ -19,9 +19,11 @@ import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.OsmFacts
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.PowerLevel
+import nl.beandesk.core.model.Rating
 import nl.beandesk.core.model.Report
 import nl.beandesk.core.model.WifiStatus
 import nl.beandesk.core.model.withReport
+import nl.beandesk.core.model.withStars
 
 data class CityInfo(val label: String, val timezone: String, val attribution: String, val center: LatLng?)
 
@@ -104,7 +106,11 @@ class PlaceRepository(
     suspend fun report(report: Report) {
         backend?.sendReport(report)
         val place = dao.place(report.placeId)?.toPlace() ?: return
-        setCommunity(report.placeId, place.community.withReport(report))
+        if (report.hasFacts) setCommunity(report.placeId, place.community.withReport(report))
+        report.stars?.let { stars ->
+            val rating = place.rating.withStars(stars)
+            dao.setRating(report.placeId, rating.average, rating.count)
+        }
     }
 
     /**
@@ -157,6 +163,8 @@ private fun ExportedPlace.toEntity(city: String): PlaceEntity {
         communityQuiet = community?.quiet,
         communityLaptopPolicy = community?.laptopPolicy?.name,
         closedReports = community?.closedReports ?: 0,
+        ratingAverage = place.rating?.average,
+        ratingCount = place.rating?.count ?: 0,
         updatedAt = updatedAt,
     )
 }
@@ -182,5 +190,6 @@ private fun PlaceEntity.toPlace(): Place? {
                 closedReports = closedReports,
             )
         },
+        rating = ratingAverage?.takeIf { ratingCount > 0 }?.let { Rating(it, ratingCount) },
     )
 }

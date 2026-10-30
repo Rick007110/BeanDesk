@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="handwritten">
+  <node id="1" lat="52.0911" lon="5.1201" version="1"><tag k="amenity" v="cafe"/><tag k="name" v="Losse Node"/></node>
+  <node id="2" lat="52.0900" lon="5.1100" version="1"><tag k="amenity" v="pub"/><tag k="name" v="Kroeg"/></node>
+  <node id="11" lat="52.1000" lon="5.1000" version="1"/>
+  <node id="12" lat="52.1000" lon="5.1020" version="1"/>
+  <node id="13" lat="52.1020" lon="5.1020" version="1"/>
+  <node id="14" lat="52.1020" lon="5.1000" version="1"/>
+  <node id="21" lat="52.0500" lon="5.0500" version="1"/>
+  <node id="22" lat="52.0500" lon="5.0540" version="1"/>
+  <node id="23" lat="52.0540" lon="5.0540" version="1"/>
+  <node id="24" lat="52.0540" lon="5.0500" version="1"/>
+  <way id="100" version="1">
+    <nd ref="11"/><nd ref="12"/><nd ref="13"/><nd ref="14"/><nd ref="11"/>
+    <tag k="amenity" v="library"/><tag k="name" v="Bieb in een gebouw"/><tag k="building" v="yes"/>
+  </way>
+  <way id="200" version="1">
+    <nd ref="21"/><nd ref="22"/><nd ref="23"/><nd ref="24"/><nd ref="21"/>
+  </way>
+  <relation id="300" version="1">
+    <member type="way" ref="200" role="outer"/>
+    <tag k="type" v="multipolygon"/><tag k="amenity" v="coworking_space"/><tag k="name" v="Werkplaats"/>
+  </relation>
+</osm>

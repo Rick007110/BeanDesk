@@ -119,7 +119,7 @@ describe("search", () => {
     assert.ok(cache.has("amersfoort"));
     assert.deepEqual(log, [
       "fetch api.pdok.nl",
-      "missing 4000 default",
+      "missing 4000 45 days",
       "overpass maps.mail.ru",
       "record 2 2",
       "import 2 2",
@@ -157,7 +157,7 @@ describe("search", () => {
     assert.deepEqual(result, { status: 502, body: { error: "fetch_failed" } });
     assert.deepEqual(
       log.filter((line) => line.startsWith("overpass ")),
-      ["overpass maps.mail.ru", "overpass maps.mail.ru", "overpass overpass.private.coffee", "overpass overpass-api.de"],
+      ["overpass maps.mail.ru", "overpass overpass.private.coffee", "overpass overpass-api.de"],
     );
     assert.ok(log.includes("record 1 0"), "failed attempts count towards the limit");
   });

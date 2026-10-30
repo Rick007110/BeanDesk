@@ -15,7 +15,7 @@ import {
 export interface Store {
   getGeocode(query: string): Promise<Geocoded | null>;
   putGeocode(query: string, hit: Geocoded): Promise<void>;
-  missingCells(lat: number, lng: number, radiusM: number, maxAge?: string): Promise<Cell[]>;
+  missingCells(lat: number, lng: number, radiusM: number, maxAge: string): Promise<Cell[]>;
   fetchesSince(since: Date): Promise<number>;
   recordFetch(cells: number, elements: number): Promise<void>;
   importArea(cells: Cell[], elements: unknown[]): Promise<void>;
@@ -36,17 +36,20 @@ export const MAX_FETCHES = 30;
 export const FETCH_WINDOW_MS = 10 * 60 * 1000;
 /** After a report, the surroundings of the place are fetched again unless that happened this recently. */
 export const REFRESH_MAX_AGE = "1 hour";
+/**
+ * A search fetches cells older than this. The whole country is imported monthly
+ * (import_osm_file), so this only catches a month whose import failed.
+ */
+export const SEARCH_MAX_AGE = "45 days";
 
-// Tried in this order, each with its own time limit; together they stay within the 150 seconds
-// an edge function may take. The public servers are busy: maps.mail.ru answers most requests
-// but now and then times out, so it gets a second try. overpass-api.de answers every request
-// from Supabase's network with 406 (an IP block, also on /api/status), so it comes last.
-const MAIL_RU = "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
+// Tried in this order, each with its own time limit, so a search never waits much longer than
+// half a minute: someone is looking at a spinner. The public servers are busy, and when they
+// fail the search still answers with what the database has. overpass-api.de answers every
+// request from Supabase's network with 406 (an IP block, also on /api/status), so it comes last.
 const OVERPASS_ENDPOINTS = [
-  { url: MAIL_RU, timeoutMs: 45_000 },
-  { url: MAIL_RU, timeoutMs: 45_000 },
-  { url: "https://overpass.private.coffee/api/interpreter", timeoutMs: 25_000 },
-  { url: "https://overpass-api.de/api/interpreter", timeoutMs: 10_000 },
+  { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", timeoutMs: 25_000 },
+  { url: "https://overpass.private.coffee/api/interpreter", timeoutMs: 8_000 },
+  { url: "https://overpass-api.de/api/interpreter", timeoutMs: 3_000 },
 ];
 const USER_AGENT = "BeanDesk-search/0.1 (+https://github.com/Rick007110/BeanDesk)";
 
@@ -95,7 +98,7 @@ async function search(deps: Deps, query: string): Promise<Response> {
   }
 
   const radius = RADIUS_M[hit.kind];
-  const sync = await syncCells(deps, hit.lat, hit.lng, radius);
+  const sync = await syncCells(deps, hit.lat, hit.lng, radius, SEARCH_MAX_AGE);
   const area = await deps.store.areaExport(hit.lat, hit.lng, radius, hit.label);
 
   // Nothing known and nothing fetched: say why, so the app does not claim there is no coffee here.
@@ -131,7 +134,7 @@ async function geocode(deps: Deps, query: string): Promise<Geocoded | null> {
 }
 
 /** Makes sure the cells around a point are in the database; fetches those that are not. */
-async function syncCells(deps: Deps, lat: number, lng: number, radiusM: number, maxAge?: string): Promise<Sync> {
+async function syncCells(deps: Deps, lat: number, lng: number, radiusM: number, maxAge: string): Promise<Sync> {
   const missing = await deps.store.missingCells(lat, lng, radiusM, maxAge);
   if (missing.length === 0) return { status: "cached", fetched: 0, pending: 0 };
 

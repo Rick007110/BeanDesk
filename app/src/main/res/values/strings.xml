@@ -110,6 +110,12 @@
     <string name="report_quiet">Rustig</string>
     <string name="report_busy">Druk</string>
     <string name="report_closed">Deze plek is permanent gesloten</string>
+    <string name="report_stars">Jouw sterren als werkplek</string>
+    <string name="report_star">%1$d van 5 sterren</string>
+    <string name="rating_none">Nog geen sterren</string>
+    <!-- Average and number of ratings, e.g. "4,3 (12)". -->
+    <string name="rating_summary">%1$s (%2$d)</string>
+    <string name="rating_description">%1$s van 5 sterren, %2$d beoordelingen</string>
     <string name="report_send">Versturen</string>
     <string name="report_anonymous">Anoniem: je hoeft geen account te maken.</string>
     <string name="report_sample_mode">Voorbeeldmodus: je melding blijft op deze telefoon.</string>

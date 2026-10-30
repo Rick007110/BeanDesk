@@ -10,6 +10,7 @@ import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.OsmFacts
 import nl.beandesk.core.model.Place
 import nl.beandesk.core.model.PowerLevel
+import nl.beandesk.core.model.Rating
 import nl.beandesk.core.model.WifiStatus
 
 /** All places of one city, as written by the import script (`importer/beandesk_import/export.py`). */
@@ -66,6 +67,7 @@ object CityExportParser {
                     closedReports = it.closedReports,
                 )
             },
+            rating = rating?.takeIf { it.count > 0 }?.let { Rating(it.average, it.count) },
         )
         return ExportedPlace(place, updatedAt)
     }
@@ -100,8 +102,12 @@ private data class PlaceDto(
     @SerialName("opening_hours") val openingHours: String? = null,
     val osm: OsmFactsDto = OsmFactsDto(),
     val community: CommunityDto? = null,
+    val rating: RatingDto? = null,
     @SerialName("updated_at") val updatedAt: String,
 )
+
+@Serializable
+private data class RatingDto(val average: Double, val count: Int)
 
 @Serializable
 private data class OsmFactsDto(

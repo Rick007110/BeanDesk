@@ -21,7 +21,11 @@ class SupabaseBackend(url: String, anonKey: String) {
 
     suspend fun sendReport(report: Report) {
         signInIfNeeded()
-        client.from("place_reports").insert(ReportRow.from(report))
+        if (report.hasFacts) client.from("place_reports").insert(ReportRow.from(report))
+        // One rating per user per place: a new one replaces the old.
+        report.stars?.let { stars ->
+            client.from("place_ratings").upsert(RatingRow(report.placeId, stars)) { onConflict = "place_id,user_id" }
+        }
     }
 
     /** The first report creates an anonymous account; supabase-kt keeps its session on the phone. */
@@ -30,6 +34,13 @@ class SupabaseBackend(url: String, anonKey: String) {
         if (client.auth.currentSessionOrNull() == null) client.auth.signInAnonymously()
     }
 }
+
+/** user_id comes from the database (auth.uid()). */
+@Serializable
+private data class RatingRow(
+    @SerialName("place_id") val placeId: Long,
+    val rating: Int,
+)
 
 /** Only the columns users may set; user_id and reported_at come from the database. */
 @Serializable

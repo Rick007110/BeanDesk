@@ -1,6 +1,10 @@
 package nl.beandesk.app.ui.places
 
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -91,8 +95,6 @@ enum class PlacesMessage {
 
 private data class UiFlags(
     val filter: PlaceFilter = PlaceFilter(),
-    // What is typed in the search field; narrows the list while typing.
-    val searchText: String = "",
     val isSearching: Boolean = false,
     val selectedId: Long? = null,
     val focusId: Long? = null,
@@ -115,6 +117,15 @@ class PlacesViewModel(
     private val homeArea = Area(key = city, label = city.replaceFirstChar { it.titlecase(Locale.ROOT) })
     private val area = MutableStateFlow(homeArea)
     private val flags = MutableStateFlow(UiFlags())
+
+    /**
+     * What is typed in the search field; narrows the list while typing. Compose state that the
+     * field reads directly: going through [state], which is built on a background thread, hands
+     * the field an older value while the user types on, and letters end up in the wrong place.
+     */
+    var searchText by mutableStateOf("")
+        private set
+
     private val locationGranted = MutableStateFlow(false)
     private val messageChannel = Channel<PlacesMessage>(Channel.BUFFERED)
     val messages: Flow<PlacesMessage> = messageChannel.receiveAsFlow()
@@ -143,8 +154,8 @@ class PlacesViewModel(
     }
 
     val state: StateFlow<PlacesUiState> =
-        combine(areaData, flags, userLocation, minuteTicks) { data, uiFlags, location, _ ->
-            buildState(data, uiFlags, location)
+        combine(areaData, flags, snapshotFlow { searchText }, userLocation, minuteTicks) { data, uiFlags, text, location, _ ->
+            buildState(data, uiFlags, text, location)
         }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlacesUiState())
@@ -172,14 +183,16 @@ class PlacesViewModel(
         }
     }
 
-    fun setSearchText(text: String) = flags.update { it.copy(searchText = text) }
+    fun onSearchTextChange(text: String) {
+        searchText = text
+    }
 
     /**
      * Looks up the typed town or address and shows the places around it. The first search of
      * an area can take a while: the backend then fetches it from OpenStreetMap.
      */
     fun searchArea() {
-        val query = flags.value.searchText.trim()
+        val query = searchText.trim()
         if (query.length < 2 || flags.value.isSearching || !canSearchAreas) return
         viewModelScope.launch {
             flags.update { it.copy(isSearching = true) }
@@ -187,7 +200,8 @@ class PlacesViewModel(
                 val found = repository.search(query)
                 area.value = found
                 // The text was a place, not a name to filter on; the list now shows that place.
-                flags.update { it.copy(searchText = "", selectedId = null, focusId = null, hasError = false) }
+                searchText = ""
+                flags.update { it.copy(selectedId = null, focusId = null, hasError = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -217,7 +231,10 @@ class PlacesViewModel(
 
     fun setFilter(filter: PlaceFilter) = flags.update { it.copy(filter = filter) }
 
-    fun clearFilters() = flags.update { it.copy(filter = PlaceFilter(), searchText = "") }
+    fun clearFilters() {
+        searchText = ""
+        flags.update { it.copy(filter = PlaceFilter()) }
+    }
 
     /** Opens the detail sheet of a place, or closes it with null. */
     fun select(placeId: Long?) = flags.update {
@@ -253,7 +270,7 @@ class PlacesViewModel(
         }
     }
 
-    private fun buildState(data: AreaData, flags: UiFlags, location: LatLng?): PlacesUiState {
+    private fun buildState(data: AreaData, flags: UiFlags, searchText: String, location: LatLng?): PlacesUiState {
         val (current, places, info) = data
         val now = ZonedDateTime.now(ZoneId.of(info?.timezone ?: DEFAULT_TIMEZONE))
         val at = WeekTime(Weekday.entries[now.dayOfWeek.value - 1], now.hour * 60 + now.minute)
@@ -262,7 +279,7 @@ class PlacesViewModel(
         val anchor = if (current != homeArea) info?.center else location
         val items = visible
             .map { PlaceItem(it, statusOf(it, at), location?.let { here -> distanceMeters(here, it.location) }) }
-            .filter { flags.filter.matches(it.place, it.status, at) && it.place.matchesText(flags.searchText) }
+            .filter { flags.filter.matches(it.place, it.status, at) && it.place.matchesText(searchText) }
             // Open places first, then the nearest (or by name while there is nothing to measure from).
             .sortedWith(
                 compareBy<PlaceItem>(
@@ -276,7 +293,7 @@ class PlacesViewModel(
             areaKey = current.key,
             isSearchArea = current != homeArea,
             homeName = homeArea.label,
-            searchText = flags.searchText,
+            searchText = searchText,
             isSearching = flags.isSearching,
             canSearchAreas = canSearchAreas,
             items = items,

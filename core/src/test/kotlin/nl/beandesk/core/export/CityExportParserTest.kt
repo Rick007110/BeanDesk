@@ -4,6 +4,7 @@ import nl.beandesk.core.model.Category
 import nl.beandesk.core.model.LaptopPolicy
 import nl.beandesk.core.model.LatLng
 import nl.beandesk.core.model.PowerLevel
+import nl.beandesk.core.model.Rating
 import nl.beandesk.core.model.WifiStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,11 +30,13 @@ class CityExportParserTest {
         assertEquals(WifiStatus.FAST, cafe.community?.wifi)
         assertEquals(PowerLevel.MANY, cafe.community?.power)
         assertEquals(LaptopPolicy.NOT_ON_WEEKENDS, cafe.community?.laptopPolicy)
+        assertEquals(Rating(4.5, 2), cafe.rating)
 
         val library = export.places[1].place
         assertEquals(Category.LIBRARY, library.category)
         assertNull(library.community)
         assertNull(library.hasWifi)
+        assertNull(library.rating)
     }
 
     @Test

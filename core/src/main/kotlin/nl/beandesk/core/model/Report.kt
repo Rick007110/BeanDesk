@@ -8,10 +8,25 @@ data class Report(
     val quiet: Boolean? = null,
     val laptopPolicy: LaptopPolicy? = null,
     val permanentlyClosed: Boolean = false,
+    // 1 to 5; stored apart from the facts, one rating per user per place.
+    val stars: Int? = null,
 ) {
-    /** The database refuses reports without any fact. */
+    /** Whether there is a fact for place_reports; the database refuses reports without one. */
+    val hasFacts: Boolean
+        get() = wifi != null || power != null || quiet != null || laptopPolicy != null || permanentlyClosed
+
     val isEmpty: Boolean
-        get() = wifi == null && power == null && quiet == null && laptopPolicy == null && !permanentlyClosed
+        get() = !hasFacts && stars == null
+}
+
+/**
+ * The rating after someone gives [stars], counted as a new rating. When that user had rated the
+ * place before, the next refresh corrects it: the database keeps one rating per user.
+ */
+fun Rating?.withStars(stars: Int): Rating {
+    val current = this ?: Rating(0.0, 0)
+    val count = current.count + 1
+    return Rating((current.average * current.count + stars) / count, count)
 }
 
 /**

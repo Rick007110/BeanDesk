@@ -129,6 +129,7 @@ private fun PlaceCard(item: PlaceItem, onClick: () -> Unit, modifier: Modifier =
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                RatingStars(place.rating)
                 StatusLine(item.status)
                 val chips = factChips(place)
                 if (chips.isEmpty()) {

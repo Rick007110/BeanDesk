@@ -46,8 +46,8 @@ class AreaSearchClient(
         http.post(url) {
             // The first search of an area waits for OpenStreetMap, which can take a while.
             timeout {
-                requestTimeoutMillis = 150_000
-                socketTimeoutMillis = 150_000
+                requestTimeoutMillis = 60_000
+                socketTimeoutMillis = 60_000
             }
             header("apikey", anonKey)
             header(HttpHeaders.Authorization, "Bearer $anonKey")
