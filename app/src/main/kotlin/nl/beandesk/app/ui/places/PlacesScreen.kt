@@ -386,14 +386,12 @@ private fun SearchField(
             Text(stringResource(if (canSearchAreas) R.string.search_hint else R.string.search_hint_list_only))
         },
         leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
-        trailingIcon = if (text.isNotEmpty()) {
-            {
+        trailingIcon = {
+            AnimatedVisibility(text.isNotEmpty(), enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
                 IconButton(onClick = { onTextChange("") }) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.search_clear))
                 }
             }
-        } else {
-            null
         },
         singleLine = true,
         shape = RoundedCornerShape(28.dp),

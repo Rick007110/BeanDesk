@@ -1,7 +1,14 @@
 package nl.beandesk.app.ui.places
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,10 +36,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -79,16 +88,19 @@ fun PlaceList(
             }
         } else {
             item(key = "count") {
-                Text(
-                    modifier = Modifier.animateItem(),
-                    text = if (items.size == totalCount) {
-                        pluralStringResource(R.plurals.places_count, totalCount, totalCount)
-                    } else {
-                        pluralStringResource(R.plurals.places_count_filtered, totalCount, items.size, totalCount)
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val count = if (items.size == totalCount) {
+                    pluralStringResource(R.plurals.places_count, totalCount, totalCount)
+                } else {
+                    pluralStringResource(R.plurals.places_count_filtered, totalCount, items.size, totalCount)
+                }
+                // The new count fades in over the old one.
+                Crossfade(count, modifier = Modifier.animateItem(), label = "count") { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         // Cards fade in and out and slide to their new spot when filters or the search change the list.
@@ -112,13 +124,32 @@ fun PlaceList(
 @Composable
 private fun PlaceCard(item: PlaceItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val place = item.place
+    // The card gives a little under a finger, and springs back.
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "press",
+    )
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        modifier = modifier.fillMaxWidth(),
+        interactionSource = interactionSource,
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
     ) {
-        Row(Modifier.padding(16.dp)) {
+        // Grows and shrinks smoothly when a report adds or changes facts.
+        Row(
+            Modifier
+                .animateContentSize()
+                .padding(16.dp),
+        ) {
             CategoryBadge(place.category, size = 48.dp)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {

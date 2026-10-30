@@ -1,5 +1,7 @@
 package nl.beandesk.app.ui.places
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -157,10 +159,12 @@ fun ReportSheet(
                 enabled = !report.isEmpty && !isSending,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                if (isSending) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.report_send))
+                Crossfade(isSending, label = "send") { sending ->
+                    if (sending) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(stringResource(R.string.report_send))
+                    }
                 }
             }
             Text(
@@ -185,6 +189,8 @@ private fun <T> ChoiceRow(label: Int, options: List<Pair<T, Int>>, selected: T?,
                     selected = isSelected,
                     onClick = { onSelect(if (isSelected) null else value) },
                     label = { Text(stringResource(text)) },
+                    // Makes room for the check smoothly instead of jumping.
+                    modifier = Modifier.animateContentSize(),
                     // A check on the chosen answer, so a tap visibly lands.
                     leadingIcon = if (isSelected) {
                         {

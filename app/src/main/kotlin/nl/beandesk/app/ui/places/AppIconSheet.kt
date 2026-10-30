@@ -1,5 +1,6 @@
 package nl.beandesk.app.ui.places
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,7 +70,7 @@ fun AppIconSheet(
 
 @Composable
 private fun IconOption(icon: AppIcon, selected: Boolean, onClick: () -> Unit) {
-    val ring = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+    val ring by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, label = "ring")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier

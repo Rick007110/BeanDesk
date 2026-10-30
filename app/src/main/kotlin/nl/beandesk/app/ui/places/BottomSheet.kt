@@ -2,6 +2,7 @@ package nl.beandesk.app.ui.places
 
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -158,7 +160,11 @@ fun BottomSheet(onDismissRequest: () -> Unit, content: @Composable ColumnScope.(
             ) {
                 Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars)) {
                     DragHandle()
-                    content()
+                    // No stretch at the ends of the content: on the emulator a tap during the
+                    // stretch after a flick to the bottom took effect seconds late.
+                    CompositionLocalProvider(LocalOverscrollFactory provides null) {
+                        content()
+                    }
                 }
             }
         }
