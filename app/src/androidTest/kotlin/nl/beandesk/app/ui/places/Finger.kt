@@ -29,7 +29,8 @@ class Finger(private val name: String) {
     fun tap(selector: BySelector, expect: BySelector) {
         val bounds = reveal(selector).visibleBounds
         device.click(bounds.centerX(), bounds.centerY())
-        find(expect, 3_000) ?: fail("Tapped $selector at ${bounds.toShortString()}, but $expect did not show")
+        device.wait(Until.findObject(expect), 3_000)
+            ?: fail("Tapped $selector at ${bounds.toShortString()}, but $expect did not show")
         shot("tapped")
     }
 
@@ -43,7 +44,7 @@ class Finger(private val name: String) {
                 shot("selected")
                 return
             }
-            Thread.sleep(50)
+            Thread.sleep(250)
         }
         fail("Tapped $selector at ${bounds.toShortString()}, but it is not selected")
     }
@@ -88,36 +89,28 @@ class Finger(private val name: String) {
 
     fun fling(fromY: Float, toY: Float) = drag(fromY, toY, steps = 6)
 
-    /** Waits until nothing on screen moves any more (at most five seconds). */
+    /**
+     * Waits until nothing on screen moves any more: no changes reported for half a second, then
+     * a moment for the stretch at the end of a list to relax.
+     *
+     * The test only listens here. Reading the whole screen over and over runs on the app's main
+     * thread, and with a fast loop of that the app handled a tap seconds late.
+     */
     private fun awaitStill() {
-        var before = layout()
-        val deadline = System.currentTimeMillis() + 5_000
-        while (System.currentTimeMillis() < deadline) {
-            Thread.sleep(300)
-            val now = layout()
-            if (now == before) return
-            before = now
-        }
-    }
-
-    private fun layout(): List<String> = device.findObjects(By.pkg(packageName)).mapNotNull { node ->
-        try {
-            "${node.text ?: node.contentDescription} ${node.visibleBounds.toShortString()}"
-        } catch (e: StaleObjectException) {
-            null
-        }
+        device.waitForIdle(5_000)
+        Thread.sleep(500)
     }
 
     fun await(selector: BySelector, timeout: Long = 3_000): UiObject2 =
         find(selector, timeout) ?: fail("Not on screen after $timeout ms: $selector")
 
-    /** Waits up to [timeout] ms for [selector]. */
+    /** Waits up to [timeout] ms for [selector]; looks about once a second. */
     fun find(selector: BySelector, timeout: Long): UiObject2? {
         val deadline = System.currentTimeMillis() + timeout
         do {
-            device.findObject(selector)?.let { return it }
+            val left = (deadline - System.currentTimeMillis()).coerceIn(1, 1_000)
+            device.wait(Until.findObject(selector), left)?.let { return it }
             dismissSystemDialog()
-            Thread.sleep(100)
         } while (System.currentTimeMillis() < deadline)
         return null
     }
@@ -127,9 +120,7 @@ class Finger(private val name: String) {
      * over everything (the launcher, for one).
      */
     private fun dismissSystemDialog() {
-        if (device.findObject(By.textContains("isn't responding")) != null) {
-            device.findObject(By.text("Wait"))?.click()
-        }
+        if (device.hasObject(By.textContains("isn't responding"))) device.findObject(By.text("Wait"))?.click()
     }
 
     fun awaitGone(selector: BySelector, timeout: Long = 3_000) {

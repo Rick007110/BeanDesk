@@ -40,9 +40,6 @@ import org.junit.runner.RunWith
 /**
  * A long form in the app's [BottomSheet], scrolled and flicked through like a thumb, with a tap
  * after each move, then sent and swiped away; the screen behind must react afterwards.
- *
- * Material's ModalBottomSheet, as app 0.2.1 had it, failed this test: after flicking to the
- * bottom of the form, the tap on Versturen did not land.
  */
 @RunWith(AndroidJUnit4::class)
 class LongFormSheetTest {
