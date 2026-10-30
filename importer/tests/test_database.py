@@ -352,7 +352,51 @@ def test_area_export_is_nearest_first_within_the_radius(conn, overpass_elements)
     assert export["places"][0]["community"]["wifi"] == "fast"
 
 
-def test_users_cannot_call_search_functions(conn):
+def test_area_export_writes_places_exactly_like_the_city_export(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    report_as(conn, create_user(conn), place_id(conn, 1001), wifi="fast", quiet=True)
+
+    by_city = {p["id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    by_area = {p["id"]: p for p in area_export(conn, radius=5000)["places"]}
+    assert by_area == by_city
+
+
+def test_place_location(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    library = place_id(conn, 2002)
+    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() == pytest.approx((52.0927, 5.1196))
+
+    conn.execute("update public.places set deleted_at = now() where id = %s", (library,))
+    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() is None
+
+
+def test_the_search_function_role_can_do_its_work(conn, overpass_elements):
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        import_area(conn, FIXTURE_CELLS, overpass_elements)
+        conn.execute("insert into public.osm_fetches (cells, elements) values (2, 8)")
+        conn.execute(
+            "insert into public.geocode_cache (query, label, kind, lat, lng) values ('utrecht', 'Utrecht', 'woonplaats', 52.09, 5.12)"
+            " on conflict (query) do update set label = excluded.label"
+        )
+        assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+        assert len(area_export(conn)["places"]) == 4
+        assert conn.execute("select * from public.place_location(%s)", (place_id(conn, 1001),)).fetchone() is not None
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "select public.area_export(52.09, 5.12, 1000, 'x')",
+        "select * from public.missing_osm_cells(52.09, 5.12, 1000)",
+        "select public.import_osm_area('[]', '[]')",
+        "select * from public.place_location(1)",
+        "select * from public.geocode_cache",
+        "insert into public.osm_cells (lat_index, lng_index) values (1, 1)",
+    ],
+)
+def test_users_cannot_use_search_internals(conn, role, statement):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
-        conn.execute("set local role anon")
-        area_export(conn)
+        conn.execute(f"set local role {role}")
+        conn.execute(statement)

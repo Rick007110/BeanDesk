@@ -39,3 +39,6 @@ grant usage on schema auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
 
 grant usage on schema public to anon, authenticated, service_role;
+-- Supabase gives the service role (edge functions, the dashboard) every table in public.
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
