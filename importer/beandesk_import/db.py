@@ -1,4 +1,4 @@
-"""Thin wrappers around the database functions in supabase/migrations, which hold every
+"""Thin wrappers around the database functions in database/migrations, which hold every
 import and export rule. The nightly import calls the same functions via pg_cron."""
 
 import psycopg

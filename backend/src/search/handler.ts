@@ -1,8 +1,7 @@
-// The search flow, without Deno or Supabase imports: everything it needs comes in through Deps,
-// so Node tests run it against fakes.
+// The search flow: everything it needs comes in through Deps, so the tests run it against fakes.
 import { type Geocoded, looksLikePlace, parsePdok, parseRequest, pdokUrl, placeSplits, RADIUS_M } from "./lib.ts";
 
-/** The database side; supabase/functions/search/index.ts implements it with the service role. */
+/** The database side; searchStore.ts implements it with the service role. */
 export interface Store {
   getGeocode(query: string): Promise<Geocoded | null>;
   putGeocode(query: string, hit: Geocoded): Promise<void>;

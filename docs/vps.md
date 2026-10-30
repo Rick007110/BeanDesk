@@ -1,165 +1,214 @@
 # BeanDesk op de eigen VPS
 
 Dit document is voor Rick en voor de Claude Code op de VPS. Het beschrijft hoe de backend van
-BeanDesk van Supabase (cloud) naar de eigen VPS gaat, wat de app van die backend verwacht, en hoe
-je controleert dat alles werkt.
+BeanDesk op de eigen VPS komt, wat de app ervan verwacht, en hoe je controleert dat alles werkt.
 
-## Wat er op de VPS komt
+## Wat er draait
 
-**Zelf-gehoste Supabase** in Docker, met daarvoor **Caddy** voor HTTPS.
+| Onderdeel | Waar | Wat het doet |
+| --- | --- | --- |
+| Postgres met PostGIS | al op de VPS, database `beandesk` | Alle plekken, meldingen en accounts. Alle regels staan als functies in de database (`database/migrations`). |
+| De API (`backend/`, Node) | Docker, alleen op `127.0.0.1:8080` | Wat de app aanroept (zie onder). Doet ook de nachtelijke taken. |
+| Caddy | Docker, poorten 80 en 443 | HTTPS voor `<naam>.duckdns.org`, met een gratis certificaat van Let's Encrypt, door naar de API. |
+| DuckDNS-cron | crontab van de VPS | Houdt `<naam>.duckdns.org` op het IP-adres van de VPS. |
 
-Waarom niet alleen een losse Postgres: de app praat met de backend via supabase-kt. De database
-leunt op wat Supabase eromheen levert:
+De API doet elke nacht zelf twee dingen:
+- **04:43 UTC:** anonieme accounts die 30 dagen niets meldden, verwijderen.
+- **05:23 UTC:** heel Nederland importeren uit `nl-places.json`. Dat bestand maakt de GitHub
+  Action `osm-data.yml` elke nacht om 02:23.
 
-- de rollen `anon`, `authenticated` en `service_role`, en `auth.uid()` in de RLS-regels;
-- anoniem inloggen;
-- de REST-API die databasefuncties als `/rest/v1/rpc/...` aanbiedt;
-- een edge function voor het zoeken.
+Is de database bij de start nog leeg, dan importeert hij meteen.
 
-Zelf-gehoste Supabase levert precies die onderdelen. Dan veranderen in de app alleen het adres en
-de anon key, en draaien de migraties ongewijzigd.
+Postgres en de API-poort zijn niet bereikbaar van buiten; alleen Caddy is dat.
 
-| Onderdeel | Wat het doet voor BeanDesk |
-| --- | --- |
-| Postgres (image `supabase/postgres`) | De database; heeft PostGIS, pg_cron en de `http`-extensie die de migraties gebruiken |
-| PostgREST | `/rest/v1`: de export, meldingen en sterren |
-| GoTrue (Auth) | `/auth/v1`: anoniem inloggen en tokens verversen |
-| Edge runtime | `/functions/v1/search`: zoeken op plaats, adres of naam |
-| Kong | Eén ingang (poort 8000) voor al het bovenstaande |
-| Studio | Het dashboard; niet open naar internet |
-| Caddy | HTTPS met een automatisch certificaat, naar Kong |
+## Nodig vooraf
 
-De bestaande Postgres op de VPS is hier niet voor nodig: Supabase brengt een eigen
-Postgres-container mee. Bezet die bestaande Postgres poort 5432 op de host, zet de Supabase-poorten
-dan op andere nummers en alleen op `127.0.0.1`.
+- **Rick:** een DuckDNS-subdomein (duckdns.org, inloggen met GitHub of Google) en het token dat
+  DuckDNS daarbij toont. Het subdomein wijst naar het **IPv4-adres van de VPS**. Vul IPv6 alleen
+  in als de VPS een werkend IPv6-adres heeft; anders leeg laten.
+- **Op de VPS:**
+  - Debian of Ubuntu, met de Postgres die er al is (versie 14 of nieuwer);
+  - Docker met de compose-plugin;
+  - git;
+  - poorten 80 en 443 open voor iedereen.
 
-## Nodig vooraf (Rick)
+## Stappen
 
-- **Een (sub)domein** voor de API, zoals `api.beandesk.nl`, met een A-record naar het IP van de
-  VPS. Android en de app willen HTTPS. Zonder domein kan `<ip-met-streepjes>.sslip.io` ook, maar
-  een eigen naam is netter en blijft hetzelfde als de VPS ooit verandert.
-- **Ruimte op de VPS:** de Supabase-containers gebruiken samen zo'n 2 à 3 GB geheugen; 4 GB of meer
-  is prettig. Schijf: een paar GB voor de images, de database zelf is klein (ruim 7.000 plekken).
-- **Waar de VPS staat** (aanbieder en land): dat komt in de privacyverklaring van de app.
+1. **DuckDNS bijhouden.** In de crontab van root, met de naam en het token van Rick:
 
-## Stappen (Claude Code op de VPS)
+   ```
+   */5 * * * * curl -fsS "https://www.duckdns.org/update?domains=<naam>&token=<token>&ip=" -o /dev/null
+   ```
 
-Werk met de officiële handleiding: <https://supabase.com/docs/guides/self-hosting/docker>. De namen
-van instellingen hieronder zijn die van de `docker/.env.example` in de Supabase-repository; kijk na
-of ze in de versie die je neemt nog zo heten.
+   Heeft de VPS een werkend IPv6-adres, zet dan `&ipv6=<dat adres>` achter de URL.
 
-1. **Docker** met de compose-plugin.
-2. **Supabase neerzetten** in `/opt/beandesk` (de map `docker/` uit
-   <https://github.com/supabase/supabase>), met een eigen `.env`:
-   - Nieuwe geheimen: `POSTGRES_PASSWORD`, `JWT_SECRET` (minstens 32 tekens), en daarmee
-     ondertekend `ANON_KEY` en `SERVICE_ROLE_KEY` (de handleiding legt uit hoe), plus
-     `DASHBOARD_USERNAME` en `DASHBOARD_PASSWORD`.
-   - `API_EXTERNAL_URL` en `SUPABASE_PUBLIC_URL`: `https://<het domein>`.
-   - Anoniem inloggen aan: `ENABLE_ANONYMOUS_USERS=true`. E-mail en telefoon zijn nog niet nodig:
-     `ENABLE_EMAIL_SIGNUP=false`, `ENABLE_PHONE_SIGNUP=false`.
-   - Tokens een uur geldig (`JWT_EXPIRY=3600`), zoals nu.
-   - Hoogstens 30 anonieme aanmeldingen per uur per IP-adres, zoals nu
-     (GoTrue: `GOTRUE_RATE_LIMIT_ANONYMOUS_USERS=30`).
-   - De database- en poolerpoorten alleen op `127.0.0.1`, en niet op 5432 als die bezet is.
-3. **Caddy** voor `https://<het domein>` naar `127.0.0.1:8000` (Kong). De firewall laat alleen 22,
-   80 en 443 door. Studio gaat ook via Kong, met de dashboard-login; open het liefst alleen via een
-   SSH-tunnel.
-4. **De migraties** uit deze repository, in volgorde, met de Supabase CLI vanuit een clone van
-   `main`:
+2. **PostGIS** voor de Postgres die er is (kijk de versie na met `psql --version`):
 
    ```bash
-   supabase db push --db-url "postgresql://postgres:<POSTGRES_PASSWORD>@127.0.0.1:<poort>/postgres"
+   sudo apt install postgresql-<versie>-postgis-3
    ```
 
-   Daarna moeten de extensies `postgis`, `pg_cron` en `http` er zijn, en deze geplande taken
-   (`select jobname, schedule from cron.job`):
-   - `beandesk-import-netherlands`, `23 5 * * *`: elke nacht de plekken van heel Nederland;
-   - `beandesk-delete-idle-anonymous-accounts`, `43 4 * * *`: lege anonieme accounts na 30 dagen weg.
-5. **De plekken** één keer meteen inladen; daarna gaat het elke nacht vanzelf:
+3. **De repository** in een map die de gebruiker `postgres` kan lezen:
 
-   ```sql
-   select public.import_osm_file();
+   ```bash
+   sudo git clone https://github.com/Rick007110/BeanDesk /opt/beandesk
    ```
 
-   Dat haalt `nl-places.json` op van de GitHub-release `osm-nl` en duurt ongeveer een minuut. Erna
-   staan er ruim 7.000 plekken in `public.places`.
-6. **De zoekfunctie:** zet `supabase/functions/search/` uit deze repository (`index.ts`,
-   `handler.ts`, `lib.ts`) in `volumes/functions/search/` en herstart de functions-container. Die
-   krijgt `SUPABASE_URL` en `SUPABASE_SERVICE_ROLE_KEY` al van de compose-configuratie.
-7. **Back-ups:** elke nacht `pg_dump -Fc` van de database `postgres` naar bijvoorbeeld
-   `/var/backups/beandesk`, de laatste 14 bewaren, en liefst ook een kopie buiten de VPS.
+   Zolang de backend nog niet in `main` staat, gebruik je de branch van de pull request: voeg
+   `-b claude/intelligent-lovelace-ecumh8` toe.
 
-## Wat de app aanroept
+4. **De database.** Bedenk een sterk wachtwoord voor de API-gebruiker en draai dan:
 
-Elke aanroep heeft de header `apikey: <ANON_KEY>`. `Authorization: Bearer ...` bevat de anon key,
-of het token van de gebruiker na inloggen.
+   ```bash
+   sudo -u postgres env API_PASSWORD='<wachtwoord>' bash /opt/beandesk/deploy/migrate.sh
+   ```
 
-| Wat | Aanroep | Als |
-| --- | --- | --- |
-| Stad downloaden | `GET /rest/v1/rpc/city_export?p_city=utrecht` | anon |
-| Alleen wijzigingen | `GET /rest/v1/rpc/city_changes?p_city=utrecht&p_since=<generated_at>` | anon |
-| Zoeken | `POST /functions/v1/search` met `{"q": "amersfoort"}` | anon |
-| Anoniem inloggen | `POST /auth/v1/signup` met `{}` (supabase-kt `signInAnonymously`), daarna token verversen | anon |
-| Melden | `POST /rest/v1/place_reports` | gebruiker |
-| Sterren | `POST /rest/v1/place_ratings?on_conflict=place_id,user_id` (upsert) | gebruiker |
-| Eigen meldingen | `GET /rest/v1/place_reports?select=place_id,reported_at,...,places(name)` en hetzelfde voor `place_ratings` | gebruiker |
-| Account verwijderen | `POST /rest/v1/rpc/delete_my_account` | gebruiker |
+   Dat doet het volgende:
+   - het maakt de database `beandesk` en de rollen `anon`, `authenticated` en `service_role`;
+   - het zet alle migraties neer, in volgorde, en houdt bij welke er al zijn;
+   - het maakt de gebruiker `beandesk_api`, die alleen naar die drie rollen mag wisselen.
+
+   Opnieuw draaien kan altijd; dan doet hij alleen wat nieuw is. Draait Postgres niet op 5432,
+   zet dan `PGPORT=<poort>` erbij.
+
+   De API logt in via `127.0.0.1` met een wachtwoord. Op Debian en Ubuntu mag dat standaard
+   (`scram-sha-256` in `pg_hba.conf`).
+
+5. **De instellingen:**
+
+   ```bash
+   cd /opt/beandesk/deploy && sudo cp .env.example .env && sudo chmod 600 .env
+   ```
+
+   Vul in `.env` in:
+   - `DOMAIN`: de DuckDNS-naam.
+   - `DATABASE_URL`: met het wachtwoord van stap 4 (en de poort, als die anders is).
+   - `JWT_SECRET`: de uitvoer van `openssl rand -hex 32`. Verander dit later niet, want dan raken
+     alle telefoons hun account kwijt.
+
+6. **Starten:**
+
+   ```bash
+   cd /opt/beandesk/deploy && sudo docker compose up -d --build
+   ```
+
+   In `sudo docker compose logs -f api` zie je bij de eerste start:
+   - `first import {"inserted": 7154, ...}`: ruim 7.000 plekken;
+   - Caddy die het certificaat ophaalt.
+
+7. **Firewall:** alleen 22, 80 en 443 open. Postgres (5432) en de API (8080) blijven dicht van
+   buiten. De API luistert alleen op `127.0.0.1`; laat Postgres ook alleen op localhost luisteren,
+   of zet hem in de firewall dicht.
+
+8. **Back-ups**, elke nacht. Bijvoorbeeld in de crontab van `postgres`:
+
+   ```
+   15 3 * * * pg_dump -Fc beandesk > /var/backups/beandesk/beandesk-$(date +\%F).dump && find /var/backups/beandesk -name '*.dump' -mtime +14 -delete
+   ```
+
+   Zet de back-ups liefst ook ergens buiten de VPS.
+
+## Bijwerken
+
+```bash
+cd /opt/beandesk && sudo git pull
+```
+
+```bash
+sudo -u postgres bash /opt/beandesk/deploy/migrate.sh
+```
+
+```bash
+cd /opt/beandesk/deploy && sudo docker compose up -d --build
+```
 
 ## Controleren
 
-Met `URL=https://<het domein>` en `KEY=<ANON_KEY>`:
+Met `URL=https://<naam>.duckdns.org`:
 
 ```bash
-curl -s "$URL/rest/v1/rpc/city_export?p_city=utrecht" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 300
+curl -s "$URL/health"
 ```
 
 ```bash
-curl -s "$URL/rest/v1/rpc/city_changes?p_city=utrecht&p_since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -H "apikey: $KEY" -H "Authorization: Bearer $KEY"
+curl -s "$URL/v1/cities/utrecht" | head -c 300
 ```
 
 ```bash
-curl -s -X POST "$URL/functions/v1/search" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d '{"q": "amersfoort"}' | head -c 300
+curl -s -X POST "$URL/v1/search" -H "Content-Type: application/json" -d '{"q": "amersfoort"}' | head -c 300
 ```
 
 ```bash
-curl -s -X POST "$URL/auth/v1/signup" -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'
+TOKEN=$(curl -s -X POST "$URL/v1/accounts" | sed 's/.*"token":"\([^"]*\)".*/\1/')
+```
+
+```bash
+curl -s -X POST "$URL/v1/reports" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"place_id": <een id uit de stad-export>, "wifi": "fast"}'
+```
+
+```bash
+curl -s "$URL/v1/me/contributions" -H "Authorization: Bearer $TOKEN"
+```
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X DELETE "$URL/v1/me" -H "Authorization: Bearer $TOKEN"
 ```
 
 Wat er uit moet komen:
 
-- De stad-export begint met `{"version": 1, "city": "utrecht", ...}` en heeft plekken.
-- `city_changes` geeft `"places": []` of een paar plekken, en `"removed": []`.
-- Zoeken geeft plekken rond Amersfoort met `"search": {"kind": "woonplaats", ...}`.
-- Aanmelden geeft een `access_token` met `"is_anonymous": true`. Met dat token als Bearer moet
-  een melding lukken:
+- `/health` geeft `{"ok":true}`.
+- De stad-export begint met `{"version": 1, "city": "utrecht", ...}` en heeft zo'n 190 plekken.
+- Zoeken geeft plekken rond Amersfoort, met `"search": {"kind": "woonplaats", ...}`.
+- Het account geeft een token.
+- De melding geeft `{"ok":true}` en staat daarna in `contributions`.
+- Verwijderen geeft `204`.
 
-  ```bash
-  curl -s -X POST "$URL/rest/v1/place_reports" -H "apikey: $KEY" -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" -d '{"place_id": <een id uit de export>, "wifi": "fast"}'
-  ```
+## Wat de app aanroept
 
-  Daarna moet `POST /rest/v1/rpc/delete_my_account` met hetzelfde token dat account weer
-  verwijderen.
+| Wat | Aanroep |
+| --- | --- |
+| Stad downloaden | `GET /v1/cities/utrecht` |
+| Alleen wijzigingen | `GET /v1/cities/utrecht/changes?since=<generated_at van de vorige download>` |
+| Zoeken | `POST /v1/search` met `{"q": "amersfoort"}` |
+| Anoniem account, bij de eerste melding | `POST /v1/accounts`, geeft `{"token": ...}` |
+| Melden en sterren | `POST /v1/reports` met `{"place_id": 1, "wifi": "fast", "stars": 4, ...}` |
+| Eigen meldingen | `GET /v1/me/contributions` |
+| Account verwijderen | `DELETE /v1/me` |
+
+De laatste drie hebben `Authorization: Bearer <token>` nodig.
+
+Er zijn limieten per IP-adres:
+- 300 aanvragen per minuut;
+- 30 nieuwe accounts per uur;
+- 60 zoekopdrachten per minuut.
+
+Daarnaast heeft elk account een daglimiet voor meldingen, in de database.
 
 ## Terug naar Rick
 
-Alleen deze twee, die in de app komen:
+Alleen het adres, `https://<naam>.duckdns.org`; dat komt in de app.
 
-- de API-URL (`https://<het domein>`);
-- de `ANON_KEY` (die is openbaar en hoort in de app).
+Nooit delen of in de repository zetten:
+- `JWT_SECRET`;
+- het wachtwoord van de database;
+- het DuckDNS-token.
 
-Nooit delen of in de repository zetten: `SERVICE_ROLE_KEY`, `JWT_SECRET`, `POSTGRES_PASSWORD` en
-de dashboard-login.
+## Seeding
 
-## De gegevens van nu
+De bezoeken uit `docs/seeding` voer je op de VPS in met de importer (Python 3), als de gebruiker
+`postgres`:
 
-In Supabase cloud staan alleen testgegevens: één anoniem account (Ricks telefoon), 7 meldingen en
-2 sterren. De plekken komen elke nacht opnieuw uit de import. Daarom begint de VPS leeg en vult
-de import hem; er hoeft niets over.
+```bash
+cd /opt/beandesk/importer && sudo python3 -m venv /opt/beandesk-venv && sudo /opt/beandesk-venv/bin/pip install -e .
+```
 
-## Daarna, in de app
+```bash
+sudo -u postgres env DATABASE_URL=postgresql:///beandesk /opt/beandesk-venv/bin/python -m beandesk_import seed-import /opt/beandesk/docs/seeding/amsterdam-binnenstad.csv --dry-run
+```
 
-- `beandesk.supabaseUrl` en `beandesk.supabaseAnonKey` in `gradle.properties` naar de VPS.
-- In de privacyverklaring "Supabase (in Frankfurt)" vervangen door de aanbieder en het land van de
-  VPS.
-- Een nieuwe release. Oudere builds praten nog met Supabase cloud; laat dat project draaien tot de
-  nieuwe build op de telefoon staat, en pauzeer het dan.
+## Later, vóór de Play Store
+
+- **Een eigen domein:** de DuckDNS-naam zit vast in de app. Een domein van een paar euro per jaar
+  is in eigen hand; wissel vóór de eerste openbare release.
+- **Twee webpagina's** die de Play Store vraagt: de privacyverklaring, en hoe je je account
+  verwijdert. Caddy kan die op hetzelfde adres tonen.

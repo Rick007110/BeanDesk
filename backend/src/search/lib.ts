@@ -1,4 +1,4 @@
-// Pure helpers for the search function: no Deno or network, so Node can test them too.
+// Pure helpers for the search: no database or network.
 
 /** Searches work in the Netherlands for now (PDOK only knows Dutch places); a margin covers the border. */
 const COVERAGE = { south: 50.6, north: 53.7, west: 3.0, east: 7.4 };

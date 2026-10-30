@@ -3,11 +3,10 @@ name: OpenStreetMap-data Nederland
 # Builds nl-places.json from the Geofabrik extract of the Netherlands: every cafe, library and
 # coworking space with the municipality it lies in, plus the grid cells the extract covers
 # (importer/beandesk_import/osm_extract.py). It replaces the file under the release "osm-nl"; the
-# database imports it with import_osm_file() every night via pg_cron
-# (supabase/migrations/*_daily_import_without_overpass.sql).
+# backend imports it every night at 05:23 UTC (backend/src/jobs.ts).
 on:
   schedule:
-    # Geofabrik updates daily, around midnight; the database imports at 05:23.
+    # Geofabrik updates daily, around midnight; the backend imports at 05:23.
     - cron: "23 2 * * *"
   workflow_dispatch:
   push:
@@ -54,6 +53,6 @@ jobs:
         run: |
           if ! gh release view osm-nl >/dev/null 2>&1; then
             gh release create osm-nl --prerelease --title "OpenStreetMap-data Nederland" \
-              --notes "Wordt elke nacht vernieuwd door de workflow osm-data.yml en door de database ingeladen met import_osm_file(). Geen app-release. © OpenStreetMap-bijdragers, ODbL."
+              --notes "Wordt elke nacht vernieuwd door de workflow osm-data.yml en door de backend ingeladen. Geen app-release. © OpenStreetMap-bijdragers, ODbL."
           fi
           gh release upload osm-nl nl-places.json --clobber

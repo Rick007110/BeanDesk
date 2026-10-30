@@ -1,7 +1,7 @@
-// Run with: node --test supabase/functions/search/search.test.ts (Node 22.18 or newer)
+// The search flow against fakes: no database or network.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createHandler, type Deps, type Store } from "./handler.ts";
+import { createHandler, type Deps, type Store } from "../src/search/handler.ts";
 import {
   foldText,
   type Geocoded,
@@ -11,7 +11,7 @@ import {
   placeSplits,
   parsePdok,
   parseRequest,
-} from "./lib.ts";
+} from "../src/search/lib.ts";
 
 const pdokAnswer = (doc: Record<string, unknown> | null) => ({ response: { numFound: doc ? 1 : 0, docs: doc ? [doc] : [] } });
 

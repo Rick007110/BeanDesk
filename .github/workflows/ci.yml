@@ -59,15 +59,35 @@ jobs:
           path: ui-screens/
           if-no-files-found: ignore
 
-  search-function:
-    name: Zoekfunctie (edge function)
+  backend:
+    name: Backend (API en zoeken)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: beandesk_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - run: node --test supabase/functions/search/search.test.ts
+      - run: npm ci
+      - name: Tests, tegen de migraties in database/
+        run: npm test
+        env:
+          BEANDESK_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beandesk_test
 
   importer:
     name: Import-script en database
@@ -94,7 +114,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e '.[test,extract]'
-      - name: Tests, ook tegen de Supabase-migraties
+      - name: Tests, ook tegen de migraties in database/
         run: pytest -q
         env:
           BEANDESK_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beandesk_test

@@ -89,7 +89,7 @@ jobs:
             if grep -q '^beandesk.useSampleData=true' gradle.properties; then
               echo "**Data:** de ingebouwde voorbeeldset met verzonnen zaken in Utrecht; meldingen blijven op de telefoon."
             else
-              echo "**Data:** live uit Supabase, met de meldingen van iedereen."
+              echo "**Data:** live van de eigen server, met de meldingen van iedereen."
             fi
             echo
             echo "### Wijzigingen"

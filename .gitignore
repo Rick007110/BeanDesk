@@ -31,6 +31,5 @@ __pycache__/
 # Lokale exports van het import-script
 importer/out/
 
-# Supabase CLI
-supabase/.branches/
-supabase/.temp/
+# Backend
+backend/node_modules/

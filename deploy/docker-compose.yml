@@ -1,0 +1,23 @@
+# BeanDesk on the own server: the API (backend/) and Caddy, which gets an HTTPS certificate for
+# the DuckDNS name. Postgres runs on the server itself; both containers use the host's network,
+# so the API reaches it on 127.0.0.1 and only Caddy is open to the internet. See docs/vps.md.
+services:
+  api:
+    build: ../backend
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:
