@@ -125,7 +125,8 @@ class SheetGesturesTest {
 
     private companion object {
         // The answer in the report sheet; the place's sheet underneath has "Druk" for the weekend.
-        val DRUK: BySelector = By.text("Druk").checkable(true)
+        // The chip is checkable, the text in it is not.
+        val DRUK: BySelector = By.checkable(true).hasDescendant(By.text("Druk"), 3)
     }
 
     /** The places screen with the sample places, as in the app; [small] as on a small phone. */
@@ -154,7 +155,8 @@ class SheetGesturesTest {
     private fun openPlace(name: String = "Koffiehuis Science Park") {
         var card = finger.find(By.text(name), 1_000)
         var tries = 0
-        while ((card == null || card.visibleBounds.centerY() > finger.height * 0.7) && tries++ < 8) {
+        // Closed places come last, so how far down a card is depends on the time of day.
+        while ((card == null || card.visibleBounds.centerY() > finger.height * 0.7) && tries++ < 20) {
             finger.drag(0.7f, 0.45f)
             card = finger.find(By.text(name), 1_000)
         }
