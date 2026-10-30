@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,12 +38,14 @@ import org.junit.rules.TestName
 import org.junit.runner.RunWith
 
 /**
- * A long form in a sheet, scrolled and flicked through like a thumb and then tapped, in
- * Material's ModalBottomSheet as app 0.2.1 had it (opening half way) and in the app's own
- * [BottomSheet]. The screen behind has a button too, for after the sheet is swiped away.
+ * A long form in the app's [BottomSheet], scrolled and flicked through like a thumb, with a tap
+ * after each move, then sent and swiped away; the screen behind must react afterwards.
+ *
+ * Material's ModalBottomSheet, as app 0.2.1 had it, failed this test: after flicking to the
+ * bottom of the form, the tap on Versturen did not land.
  */
 @RunWith(AndroidJUnit4::class)
-class SheetTapsAfterScrollingTest {
+class LongFormSheetTest {
     @get:Rule
     val testName = TestName()
 
@@ -58,23 +58,13 @@ class SheetTapsAfterScrollingTest {
         scenario?.close()
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
     @Test
-    fun materialSheetAsInVersion021() = scrollTapAndSwipeAway { onDismiss, content ->
-        ModalBottomSheet(onDismissRequest = onDismiss) { content() }
-    }
-
-    @Test
-    fun ownSheet() = scrollTapAndSwipeAway { onDismiss, content ->
-        BottomSheet(onDismissRequest = onDismiss) { content() }
-    }
-
-    private fun scrollTapAndSwipeAway(sheet: @Composable (onDismiss: () -> Unit, content: @Composable () -> Unit) -> Unit) {
+    fun everyTapLandsAfterScrollingAndTheScreenWorksAfterSwipingAway() {
         finger.startRecording()
         scenario = ActivityScenario.launch(ComponentActivity::class.java).also {
             it.onActivity { activity ->
                 activity.enableEdgeToEdge()
-                activity.setContent { BeanDeskTheme { Screen(sheet) } }
+                activity.setContent { BeanDeskTheme { Screen() } }
             }
         }
         finger.await(By.text("Vraag 1"), timeout = 10_000)
@@ -105,10 +95,12 @@ class SheetTapsAfterScrollingTest {
         finger.tap(By.text("Achter de sheet: 0"), expect = By.text("Achter de sheet: 1"))
     }
 
-    /** The first question row whose chip [option] is well on screen, like "B4". */
+    /** The first question row whose chip [option] is well on screen and not chosen yet, like "B4". */
     private fun visible(option: String): String {
         repeat(5) {
-            (1..QUESTIONS).map { "$option$it" }.firstOrNull { text -> isWellOnScreen(By.text(text)) }?.let { return it }
+            (1..QUESTIONS).map { "$option$it" }
+                .firstOrNull { text -> isWellOnScreen(By.text(text)) && !finger.isSelected(By.text(text)) }
+                ?.let { return it }
             Thread.sleep(300)
         }
         return finger.fail("No $option chip on screen")
@@ -124,7 +116,7 @@ class SheetTapsAfterScrollingTest {
 
     @OptIn(ExperimentalLayoutApi::class)
     @Composable
-    private fun Screen(sheet: @Composable (onDismiss: () -> Unit, content: @Composable () -> Unit) -> Unit) {
+    private fun Screen() {
         var behind by remember { mutableIntStateOf(0) }
         var open by remember { mutableStateOf(true) }
         Surface(Modifier.fillMaxSize()) {
@@ -133,7 +125,7 @@ class SheetTapsAfterScrollingTest {
             }
         }
         if (open) {
-            sheet({ open = false }) {
+            BottomSheet(onDismissRequest = { open = false }) {
                 var picked by remember { mutableStateOf(setOf<String>()) }
                 var sent by remember { mutableStateOf(false) }
                 Column(

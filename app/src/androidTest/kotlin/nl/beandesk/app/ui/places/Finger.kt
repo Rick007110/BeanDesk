@@ -39,7 +39,7 @@ class Finger(private val name: String) {
         device.click(bounds.centerX(), bounds.centerY())
         val deadline = System.currentTimeMillis() + 2_000
         while (System.currentTimeMillis() < deadline) {
-            if (isOn(device.findObject(selector))) {
+            if (isSelected(selector)) {
                 shot("selected")
                 return
             }
@@ -47,6 +47,8 @@ class Finger(private val name: String) {
         }
         fail("Tapped $selector at ${bounds.toShortString()}, but it is not selected")
     }
+
+    fun isSelected(selector: BySelector): Boolean = isOn(device.findObject(selector))
 
     /**
      * Whether the chip or button around [node] is selected. A text or icon is found, not the chip
