@@ -37,10 +37,16 @@ export const FETCH_WINDOW_MS = 10 * 60 * 1000;
 /** After a report, the surroundings of the place are fetched again unless that happened this recently. */
 export const REFRESH_MAX_AGE = "1 hour";
 
+// Tried in this order, each with its own time limit; together they stay within the 150 seconds
+// an edge function may take. The public servers are busy: maps.mail.ru answers most requests
+// but now and then times out, so it gets a second try. overpass-api.de answers every request
+// from Supabase's network with 406 (an IP block, also on /api/status), so it comes last.
+const MAIL_RU = "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
 const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+  { url: MAIL_RU, timeoutMs: 45_000 },
+  { url: MAIL_RU, timeoutMs: 45_000 },
+  { url: "https://overpass.private.coffee/api/interpreter", timeoutMs: 25_000 },
+  { url: "https://overpass-api.de/api/interpreter", timeoutMs: 10_000 },
 ];
 const USER_AGENT = "BeanDesk-search/0.1 (+https://github.com/Rick007110/BeanDesk)";
 
@@ -146,13 +152,13 @@ async function syncCells(deps: Deps, lat: number, lng: number, radiusM: number, 
 
 async function fetchOverpass(deps: Deps, cells: Cell[]): Promise<unknown[] | null> {
   const body = new URLSearchParams({ data: overpassQuery(cells) });
-  for (const endpoint of OVERPASS_ENDPOINTS) {
+  for (const { url: endpoint, timeoutMs } of OVERPASS_ENDPOINTS) {
     try {
       const response = await deps.fetch(endpoint, {
         method: "POST",
         body,
         headers: { "user-agent": USER_AGENT },
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) {
         console.warn(`Overpass ${endpoint} answered ${response.status}: ${(await response.text()).slice(0, 200)}`);
