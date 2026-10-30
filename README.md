@@ -162,3 +162,27 @@ node --test supabase/functions/search/search.test.ts
 - [ ] Opruimen van oude anonieme accounts zonder meldingen
 - [ ] Privacyverklaring en "account verwijderen" in de app
 - [ ] Seeding: 30-50 zaken in een of twee buurten
+
+## Ideeën voor later
+
+Door Rick gekozen uit voorstellen; nog niet gebouwd.
+
+**Melden**
+- [ ] Wifi-snelheid meten bij een melding (download in Mbit/s, tegen onze eigen server)
+- [ ] Rust meten: 5 seconden het geluidsniveau meten (alleen het getal in decibel gaat mee)
+- [ ] Geschikt om te bellen: vraag bij melden en een filter "Bellen kan"
+- [ ] Laptopregels: tijdslimiet, minimale besteding, laptopvrije tafels of uren
+- [ ] Toilet en eten: vragen bij melden en filters
+- [ ] Prijs van een cappuccino, en filteren op goedkoop
+
+**Vinden**
+- [ ] Filters "Open na 18:00" en "Open op zondag"
+- [ ] Sorteren op afstand, sterren of langst open
+- [ ] Reistijd in de lijst ("6 min fietsen · 15 min lopen"), uit de afstand
+- [ ] Recente zoekopdrachten onder de zoekbalk
+
+**Erbij**
+- [ ] Plek delen (naam, adres en kaartlink) via WhatsApp, Signal en dergelijke
+- [ ] Widget: dichtstbijzijnde open plek met wifi
+- [ ] Sluitingswaarschuwing: na "Ik werk hier" een melding 30 minuten voor sluitingstijd
+- [ ] Bijdrage-teller in je profiel: hoeveel plekken je bijwerkte

@@ -23,7 +23,8 @@
         "quiet": true,
         "laptop_policy": "not_on_weekends",
         "closed_reports": 0,
-        "last_report_at": "2026-10-28T10:12:00+00:00"
+        "last_report_at": "2026-10-28T10:12:00+00:00",
+        "quiet_by_daypart": {"morning": {"quiet": 2, "busy": 1}, "weekend": {"quiet": 0, "busy": 3}}
       },
       "rating": {"average": 4.5, "count": 2},
       "updated_at": "2026-10-28T10:12:00+00:00"
