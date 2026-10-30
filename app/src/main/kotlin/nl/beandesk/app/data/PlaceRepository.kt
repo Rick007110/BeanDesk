@@ -9,7 +9,7 @@ import nl.beandesk.app.data.local.PlaceDao
 import nl.beandesk.app.data.local.PlaceEntity
 import nl.beandesk.app.data.remote.AreaSearchSource
 import nl.beandesk.app.data.remote.CityExportSource
-import nl.beandesk.app.data.remote.SupabaseBackend
+import nl.beandesk.app.data.remote.ApiBackend
 import nl.beandesk.core.export.CityExport
 import nl.beandesk.core.export.ExportedPlace
 import nl.beandesk.core.hours.WeekTime
@@ -51,13 +51,13 @@ data class Area(
  * Filtering and sorting happen on the phone, so the user's location never leaves it. A search
  * sends only the typed town or address.
  *
- * [backend] is null without a Supabase project (sample data): reports then stay on the phone.
+ * [backend] is null with sample data: reports then stay on the phone.
  */
 class PlaceRepository(
     private val dao: PlaceDao,
     private val source: CityExportSource,
     private val searchSource: AreaSearchSource,
-    private val backend: SupabaseBackend?,
+    private val backend: ApiBackend?,
 ) {
     val sendsReports: Boolean get() = backend != null
 

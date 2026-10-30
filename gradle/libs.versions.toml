@@ -12,7 +12,6 @@ room = "2.8.5"
 ktor = "3.6.1"
 maplibre = "13.7.1"
 play-services-location = "21.4.0"
-supabase = "3.8.0"
 junit = "5.14.4"
 androidx-test-runner = "1.7.0"
 androidx-test-junit = "1.3.0"
@@ -40,13 +39,11 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 
 maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "play-services-location" }
 
-supabase-bom = { module = "io.github.jan-tennert.supabase:bom", version.ref = "supabase" }
-supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt" }
-supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt" }
 
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }

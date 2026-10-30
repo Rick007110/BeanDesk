@@ -182,7 +182,7 @@
     <string name="privacy_location_title">Je locatie</string>
     <string name="privacy_location_body">BeanDesk gebruikt je locatie alleen als je dat toestaat, en alleen terwijl je de app gebruikt. De app rekent afstanden uit op je telefoon; je locatie gaat nergens heen.</string>
     <string name="privacy_reports_title">Meldingen en sterren</string>
-    <string name="privacy_reports_body">Bij je eerste melding maakt BeanDesk een anoniem account aan, zonder naam, e-mailadres of telefoonnummer. Je meldingen en sterren worden met dat account opgeslagen in onze database bij Supabase (in Frankfurt), zodat je ze hier terugziet en we misbruik kunnen tegengaan. Anderen zien alleen het totaal per plek, nooit wie wat meldde.</string>
+    <string name="privacy_reports_body">Bij je eerste melding maakt BeanDesk een anoniem account aan, zonder naam, e-mailadres of telefoonnummer. Je meldingen en sterren worden met dat account opgeslagen in de database op onze eigen server, zodat je ze hier terugziet en we misbruik kunnen tegengaan. Anderen zien alleen het totaal per plek, nooit wie wat meldde.</string>
     <string name="privacy_search_title">Zoeken</string>
     <string name="privacy_search_body">Wat je in het zoekveld typt, gaat naar onze server. Die zoekt de plaats of het adres op bij PDOK (de locatieserver van de overheid) en haalt plekken uit OpenStreetMap. Je zoekopdracht wordt niet aan je account gekoppeld.</string>
     <string name="privacy_map_title">Kaart en route</string>

@@ -14,7 +14,8 @@ import nl.beandesk.app.data.remote.CityExportClient
 import nl.beandesk.app.data.remote.CityExportSource
 import nl.beandesk.app.data.remote.NoAreaSearch
 import nl.beandesk.app.data.remote.SampleCityExportSource
-import nl.beandesk.app.data.remote.SupabaseBackend
+import nl.beandesk.app.data.remote.ApiBackend
+import nl.beandesk.app.data.remote.PrefsTokenStore
 import nl.beandesk.app.icon.AppIconManager
 import nl.beandesk.app.settings.AppSettings
 
@@ -37,20 +38,20 @@ class AppContainer(context: Context) {
         if (BuildConfig.USE_SAMPLE_DATA) {
             SampleCityExportSource(context.assets)
         } else {
-            CityExportClient(http, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+            CityExportClient(http, BuildConfig.API_URL)
         }
 
     private val searchSource: AreaSearchSource =
         if (BuildConfig.USE_SAMPLE_DATA) {
             NoAreaSearch
         } else {
-            AreaSearchClient(http, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+            AreaSearchClient(http, BuildConfig.API_URL)
         }
 
-    // Sample places do not exist in the database, so reports about them stay on the phone.
-    val backend: SupabaseBackend? =
-        if (!BuildConfig.USE_SAMPLE_DATA && BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()) {
-            SupabaseBackend(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+    // Sample places do not exist on the server, so reports about them stay on the phone.
+    val backend: ApiBackend? =
+        if (!BuildConfig.USE_SAMPLE_DATA && BuildConfig.API_URL.isNotBlank()) {
+            ApiBackend(http, BuildConfig.API_URL, PrefsTokenStore(context))
         } else {
             null
         }

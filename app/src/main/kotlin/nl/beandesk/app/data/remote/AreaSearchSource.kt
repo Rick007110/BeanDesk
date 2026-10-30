@@ -6,8 +6,8 @@ import nl.beandesk.core.export.CityExport
 data class SearchResult(val export: CityExport, val byName: Boolean)
 
 /**
- * Searches with the edge function `search` (supabase/functions/search): places whose name matches,
- * or the places around a town or address. The answer has the city-export format; its city is the
+ * Searches on BeanDesk's server (backend/src/search): places whose name matches, or the places
+ * around a town or address. The answer has the city-export format; its city is the
  * label of what was found.
  */
 interface AreaSearchSource {

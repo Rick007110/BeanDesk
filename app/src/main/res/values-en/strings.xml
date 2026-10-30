@@ -180,7 +180,7 @@
     <string name="privacy_location_title">Your location</string>
     <string name="privacy_location_body">BeanDesk only uses your location when you allow it, and only while you use the app. The app works out distances on your phone; your location goes nowhere.</string>
     <string name="privacy_reports_title">Reports and stars</string>
-    <string name="privacy_reports_body">With your first report BeanDesk creates an anonymous account, without a name, email address or phone number. Your reports and stars are stored with that account in our database at Supabase (in Frankfurt), so you can see them here and we can fight abuse. Others only see the totals per place, never who reported what.</string>
+    <string name="privacy_reports_body">With your first report BeanDesk creates an anonymous account, without a name, email address or phone number. Your reports and stars are stored with that account in the database on our own server, so you can see them here and we can fight abuse. Others only see the totals per place, never who reported what.</string>
     <string name="privacy_search_title">Search</string>
     <string name="privacy_search_body">What you type in the search field goes to our server. It looks up the town or address at PDOK (the Dutch government\'s location service) and gets places from OpenStreetMap. Your search is not linked to your account.</string>
     <string name="privacy_map_title">Map and route</string>
