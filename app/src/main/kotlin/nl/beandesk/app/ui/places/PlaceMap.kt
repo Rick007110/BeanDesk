@@ -41,12 +41,13 @@ private const val PLACE_ZOOM = 15.5
 
 /**
  * MapLibre map with one circle per place and a blue dot for the user. The camera starts on
- * [center], moves to [focus] whenever that changes, and to [userLocation] each time
- * [recenterRequests] goes up.
+ * [center], again whenever [areaKey] changes (a search), moves to [focus] whenever that
+ * changes, and to [userLocation] each time [recenterRequests] goes up.
  */
 @Composable
 fun PlaceMap(
     items: List<PlaceItem>,
+    areaKey: String,
     center: LatLng?,
     focus: LatLng?,
     userLocation: LatLng?,
@@ -60,7 +61,8 @@ fun PlaceMap(
     val currentOnPlaceClick by rememberUpdatedState(onPlaceClick)
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
-    var centered by remember { mutableStateOf(false) }
+    // Per area: a new search moves the camera to what was found.
+    var centered by remember(areaKey) { mutableStateOf(false) }
 
     MapLifecycle(mapView)
 
@@ -122,9 +124,9 @@ fun PlaceMap(
         }
     }
 
-    // A place to focus on wins; otherwise the camera jumps to the city once,
+    // A place to focus on wins; otherwise the camera jumps to the area once,
     // after which the user is in control.
-    LaunchedEffect(map, center, focus) {
+    LaunchedEffect(map, areaKey, center, focus) {
         val loadedMap = map ?: return@LaunchedEffect
         if (focus != null) {
             loadedMap.animateCamera(CameraUpdateFactory.newLatLngZoom(MapLatLng(focus.lat, focus.lng), PLACE_ZOOM))

@@ -15,10 +15,11 @@ abstract class PlaceDao {
     @Query("SELECT * FROM cities WHERE city = :city")
     abstract fun observeCity(city: String): Flow<CityEntity?>
 
-    @Query("SELECT * FROM places WHERE id = :id")
+    // A place in several areas has a copy in each; they are all the same.
+    @Query("SELECT * FROM places WHERE id = :id LIMIT 1")
     abstract suspend fun place(id: Long): PlaceEntity?
 
-    /** Replaces what users say about a place; enum values are stored by name. */
+    /** Replaces what users say about a place, in every area it is in; enum values are stored by name. */
     @Query(
         """
         UPDATE places SET hasCommunity = 1, communityWifi = :wifi, communityPower = :power,
@@ -42,6 +43,31 @@ abstract class PlaceDao {
         insertPlaces(places)
         upsertCity(city)
     }
+
+    /** Keeps the [keep] most recent searches, so the cache does not grow with every search. */
+    @Transaction
+    open suspend fun pruneSearches(keep: Int) {
+        deleteSearchPlacesBeyond(keep)
+        deleteSearchesBeyond(keep)
+    }
+
+    @Query(
+        """
+        DELETE FROM places WHERE city IN (
+            SELECT city FROM cities WHERE city LIKE 'zoek:%' ORDER BY generatedAt DESC LIMIT -1 OFFSET :keep
+        )
+        """,
+    )
+    protected abstract suspend fun deleteSearchPlacesBeyond(keep: Int)
+
+    @Query(
+        """
+        DELETE FROM cities WHERE city IN (
+            SELECT city FROM cities WHERE city LIKE 'zoek:%' ORDER BY generatedAt DESC LIMIT -1 OFFSET :keep
+        )
+        """,
+    )
+    protected abstract suspend fun deleteSearchesBeyond(keep: Int)
 
     @Query("DELETE FROM places WHERE city = :city")
     protected abstract suspend fun deletePlaces(city: String)

@@ -262,3 +262,141 @@ def test_anyone_may_read_the_export(conn, overpass_elements):
     with conn.transaction():
         conn.execute("set local role anon")
         assert len(db.city_export(conn, "utrecht")["places"]) == 4
+
+
+# --- Search areas --------------------------------------------------------------------------
+
+# The fixture's places lie in two cells: (2604, 170) and (2604, 171).
+FIXTURE_CELLS = [{"lat_index": 2604, "lng_index": 170}, {"lat_index": 2604, "lng_index": 171}]
+
+
+def import_area(conn, cells, elements) -> dict:
+    return conn.execute(
+        "select public.import_osm_area(%s, %s)", (psycopg.types.json.Jsonb(cells), psycopg.types.json.Jsonb(elements))
+    ).fetchone()[0]
+
+
+def missing_cells(conn, lat=52.09, lng=5.12, radius=2000, max_age="30 days") -> set[tuple[int, int]]:
+    rows = conn.execute(
+        "select lat_index, lng_index from public.missing_osm_cells(%s, %s, %s, %s::interval)", (lat, lng, radius, max_age)
+    ).fetchall()
+    return {(r[0], r[1]) for r in rows}
+
+
+def area_export(conn, lat=52.0911, lng=5.1201, radius=2000, label="Utrecht") -> dict:
+    return conn.execute(
+        "select public.area_export(%s, %s, %s, %s)", (lat, lng, radius, label)
+    ).fetchone()[0]
+
+
+def test_missing_cells_cover_the_radius_and_skip_fresh_ones(conn):
+    before = missing_cells(conn)
+    # 2 km around (52.09, 5.12): 3 rows of cells (0.02° lat) by 3 columns (0.03° lng).
+    assert len(before) == 9
+    assert (2604, 170) in before
+
+    conn.execute("insert into public.osm_cells (lat_index, lng_index) values (2604, 170)")
+    conn.execute("insert into public.osm_cells (lat_index, lng_index, fetched_at) values (2604, 171, now() - interval '40 days')")
+    after = missing_cells(conn)
+    assert (2604, 170) not in after
+    # Older than 30 days counts as missing again.
+    assert (2604, 171) in after
+    assert len(after) == 8
+
+
+def test_area_import_adds_places_without_a_city_and_marks_cells(conn, overpass_elements):
+    result = import_area(conn, FIXTURE_CELLS, overpass_elements)
+    assert (result["inserted"], result["updated"], result["deleted"]) == (4, 0, 0)
+
+    cities = conn.execute("select distinct city from public.places").fetchall()
+    assert cities == [(None,)]
+    assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+
+
+def test_area_import_keeps_the_city_of_known_places(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    result = import_area(conn, FIXTURE_CELLS, overpass_elements)
+    assert (result["inserted"], result["updated"]) == (0, 0)
+    assert conn.execute("select count(*) from public.places where city = 'utrecht'").fetchone()[0] == 4
+
+
+def test_area_import_soft_deletes_only_inside_its_cells(conn, overpass_elements):
+    import_area(conn, FIXTURE_CELLS, overpass_elements)
+    # Re-fetch only cell (2604, 171), which holds the coworking space, now gone from OSM.
+    result = import_area(conn, [{"lat_index": 2604, "lng_index": 171}], [])
+    # Nothing came back where 1 place was: that looks like a bad answer, so nothing is deleted.
+    assert result["deleted"] == 0
+
+    without_coworking = [e for e in overpass_elements if e["id"] != 3003]
+    result = import_area(conn, FIXTURE_CELLS, without_coworking)
+    assert result["deleted"] == 1
+    assert places(conn)[3003]["deleted_at"] is not None
+    assert places(conn)[1001]["deleted_at"] is None
+
+
+def test_area_export_is_nearest_first_within_the_radius(conn, overpass_elements):
+    import_area(conn, FIXTURE_CELLS, overpass_elements)
+    report_as(conn, create_user(conn), place_id(conn, 1001), wifi="fast")
+    sample = json.loads(APP_SAMPLE.read_text())
+
+    export = area_export(conn, lat=52.0911, lng=5.1201, radius=500, label="Oudegracht 1, Utrecht")
+
+    assert export["city"] == "Oudegracht 1, Utrecht"
+    assert export["center"] == {"lat": 52.0911, "lng": 5.1201}
+    assert export["radius_m"] == 500
+    # The app reads every key of its sample; extra keys such as radius_m are ignored.
+    assert sample.keys() <= export.keys()
+    assert export["places"][0].keys() == sample["places"][0].keys()
+    # 1001 is at the point, 2002 about 200 m away; the others are further than 500 m.
+    assert [p["osm_id"] for p in export["places"]] == [1001, 2002]
+    assert export["places"][0]["community"]["wifi"] == "fast"
+
+
+def test_area_export_writes_places_exactly_like_the_city_export(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    report_as(conn, create_user(conn), place_id(conn, 1001), wifi="fast", quiet=True)
+
+    by_city = {p["id"]: p for p in db.city_export(conn, "utrecht")["places"]}
+    by_area = {p["id"]: p for p in area_export(conn, radius=5000)["places"]}
+    assert by_area == by_city
+
+
+def test_place_location(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    library = place_id(conn, 2002)
+    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() == pytest.approx((52.0927, 5.1196))
+
+    conn.execute("update public.places set deleted_at = now() where id = %s", (library,))
+    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() is None
+
+
+def test_the_search_function_role_can_do_its_work(conn, overpass_elements):
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        import_area(conn, FIXTURE_CELLS, overpass_elements)
+        conn.execute("insert into public.osm_fetches (cells, elements) values (2, 8)")
+        conn.execute(
+            "insert into public.geocode_cache (query, label, kind, lat, lng) values ('utrecht', 'Utrecht', 'woonplaats', 52.09, 5.12)"
+            " on conflict (query) do update set label = excluded.label"
+        )
+        assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+        assert len(area_export(conn)["places"]) == 4
+        assert conn.execute("select * from public.place_location(%s)", (place_id(conn, 1001),)).fetchone() is not None
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "select public.area_export(52.09, 5.12, 1000, 'x')",
+        "select * from public.missing_osm_cells(52.09, 5.12, 1000)",
+        "select public.import_osm_area('[]', '[]')",
+        "select * from public.place_location(1)",
+        "select * from public.geocode_cache",
+        "insert into public.osm_cells (lat_index, lng_index) values (1, 1)",
+    ],
+)
+def test_users_cannot_use_search_internals(conn, role, statement):
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute(f"set local role {role}")
+        conn.execute(statement)

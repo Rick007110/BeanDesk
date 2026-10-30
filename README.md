@@ -10,15 +10,16 @@ De backend is het Supabase-project **BeanDesk** (Frankfurt). Alles wat met data 
 
 - **Import:** `import_city()` haalt de zaken van een stad uit OpenStreetMap (via de `http`-extensie) en `import_osm_elements()` past de regels toe: wat geen werkplek is valt af, verdwenen zaken krijgen een `deleted_at`. `pg_cron` doet dit elke maandag om 03:17 UTC voor de steden met `active = true` in de tabel `cities`.
 - **Stad-export:** `city_export()` bouwt per stad één JSON met alle zichtbare plekken en de laatste meldingen.
-- **De app:** haalt die export in één keer op, bewaart hem in Room en zoekt en filtert daarna alleen op de telefoon. Meldingen gaan als anonieme gebruiker rechtstreeks naar `place_reports`.
+- **Zoeken:** de edge function `search` (`supabase/functions/search`) zoekt een plaats, adres of postcode op bij PDOK en geeft de plekken eromheen. Wie als eerste een gebied zoekt, laat het ophalen uit OpenStreetMap en opslaan; daarna komt het voor iedereen direct uit de database. Zie [Zoeken](#zoeken).
+- **De app:** haalt die export in één keer op, bewaart hem in Room en filtert en sorteert daarna alleen op de telefoon. Meldingen gaan als anonieme gebruiker rechtstreeks naar `place_reports`.
 
-De locatie van de gebruiker gaat dus nergens heen, en de app doet geen calls naar Overpass of Google.
+De locatie van de gebruiker gaat dus nergens heen: bij zoeken verstuurt de app alleen de getypte tekst. De app zelf doet geen calls naar Overpass, PDOK of Google.
 
 | Map | Inhoud |
 | --- | --- |
 | `app/` | Android-app: Kotlin, Jetpack Compose, MapLibre, Room, Ktor |
 | `core/` | Logica zonder Android: openingstijden, filters, afstand, routelink en het inlezen van de stad-export. Kan later naar Kotlin Multiplatform als er een iOS-app komt. |
-| `supabase/` | Migraties: schema, RLS-regels, triggers, import, export en de wekelijkse taak |
+| `supabase/` | Migraties (schema, RLS-regels, triggers, import, export, de wekelijkse taak) en de edge function `search` |
 | `importer/` | Kleine Python-CLI om die databasefuncties aan te roepen, plus de databasetests |
 | `.github/workflows/` | CI en de releases met APK |
 | `docs/brand/` | Logo, kleuren en het script dat alle logobestanden maakt |
@@ -55,6 +56,14 @@ supabase link --project-ref hsjufnfhhiowwaiyvcvx
 ```bash
 supabase db push
 ```
+
+De edge function zet je neer met:
+
+```bash
+supabase functions deploy search
+```
+
+Migratie `20261030000000_search_areas` is via de SQL-editor in het dashboard gedraaid. Hij staat daarom niet in de migratiegeschiedenis van het project; `supabase db push` probeert hem dan opnieuw, en dat mislukt omdat de tabellen al bestaan. Markeer hem één keer als gedaan met `supabase migration repair --status applied 20261030000000`.
 
 Anoniem inloggen moet aan staan (Authentication → Sign In / Providers → "Allow anonymous sign-ins"); daarzonder werkt het melden niet. In `supabase/config.toml` staat het voor lokaal gebruik al aan.
 
@@ -97,6 +106,30 @@ Versie 1 bevat per stad de tijdzone, een middelpunt voor de kaart, de OSM-attrib
 
 De databasefunctie `city_export()` schrijft het formaat, `core/.../export/CityExport.kt` leest het. Een test in `importer/tests/test_database.py` vergelijkt de uitvoer met het voorbeeld waarop de Kotlin-tests draaien, zodat beide kanten gelijk blijven. De app vraagt hem op via `GET /rest/v1/rpc/city_export?p_city=utrecht`.
 
+## Zoeken
+
+Het zoekveld boven de lijst doet twee dingen:
+
+- **Typen** filtert de getoonde plekken direct op naam en adres, op de telefoon. Hoofdletters en accenten maken niet uit.
+- **Zoeken** (de zoektoets of de kaart "Zoek rond …") vraagt de edge function om de plekken rond een plaats, adres of postcode. Het chipje met de plaatsnaam brengt je terug naar de stad.
+
+De edge function:
+
+1. zoekt de tekst één keer op bij de [PDOK Locatieserver](https://api.pdok.nl/bzk/locatieserver/search/v3_1/ui/) en bewaart het antwoord in `geocode_cache`. Een plaats krijgt een straal van 4 km, een straat 2 km, een adres of postcode 1,5 km;
+2. deelt de wereld op in vakjes van 0,02° bij 0,03° (ongeveer 2 bij 2 km) en kijkt in `osm_cells` welke vakjes in die straal nog nooit, of langer dan 30 dagen geleden, uit OpenStreetMap zijn gehaald;
+3. haalt alleen die vakjes op bij Overpass (hooguit 48 per keer, de dichtstbijzijnde eerst) en slaat ze op met `import_osm_area()`, met dezelfde regels als de stadsimport;
+4. antwoordt met `area_export()`: hetzelfde formaat als de stad-export, dichtstbijzijnde eerst, plus `radius_m` en `search`.
+
+Na een melding vraagt de app de functie om het vakje van die plek opnieuw op te halen, als dat langer dan een uur geleden is. Zo komen verbeteringen in OpenStreetMap snel binnen. Alle gebruikers samen starten hooguit 30 Overpass-aanvragen per 10 minuten (`osm_fetches`). Lukt Overpass niet, dan antwoordt de functie met wat er al in de database staat en probeert hij het bij de volgende zoekopdracht opnieuw.
+
+Zoekt iemand een gebied dat al is opgehaald, dan kost dat alleen een databasevraag. De app bewaart de laatste tien gezochte gebieden ook op de telefoon.
+
+De tests van de functie draaien met Node (22.18 of nieuwer):
+
+```bash
+node --test supabase/functions/search/search.test.ts
+```
+
 ## Keuzes die afwijken van het plan of het aanvullen
 
 - **Openingstijden:** OpeningHoursParser kan alleen parsen, niet bepalen of een zaak open is. Daarom staat er een eigen evaluator in `core`, zonder Java-afhankelijkheid. Die snapt de gangbare vormen (dagen, tijden, over middernacht, `off`, `24/7`) en negeert feestdagen. Alles daarbuiten toont de app als "onbekend".
@@ -116,7 +149,10 @@ De databasefunctie `city_export()` schrijft het formaat, `core/.../export/CityEx
 - [x] Supabase-project met de zaken van Utrecht en een wekelijkse import
 - [ ] Delta-sync: alleen gewijzigde zaken ophalen in plaats van de hele export
 - [ ] Detailpagina met openingstijden per dag
-- [ ] Zoeken op naam of buurt
+- [x] Zoeken op naam, plaats, adres of postcode, met opslag van nieuwe gebieden in de database
+- [ ] Overpass: de openbare servers zitten vaak vol. Bij veel gebruikers een eigen Overpass-instantie of een betaalde dienst
 - [ ] Tegelprovider kiezen en de kaartstijl instellen
+- [ ] CAPTCHA (hCaptcha of Turnstile) bij anoniem inloggen, vóór de launch; tijdens het testen staat CAPTCHA-bescherming in Supabase uit
+- [ ] Opruimen van oude anonieme accounts zonder meldingen
 - [ ] Privacyverklaring en "account verwijderen" in de app
 - [ ] Seeding: 30-50 zaken in een of twee buurten
