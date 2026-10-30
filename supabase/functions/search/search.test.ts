@@ -90,8 +90,11 @@ function fakes(options: { missing?: Cell[]; fetchesSince?: number; overpass?: "o
   };
   const fetchFake = (async (input: string | URL | Request) => {
     const url = String(input);
-    log.push(`fetch ${new URL(url).host}`);
-    if (url.includes("pdok")) return Response.json(options.pdok ?? pdokAnswer(AMERSFOORT));
+    if (url.includes("pdok")) {
+      log.push(`fetch ${new URL(url).host}`);
+      return Response.json(options.pdok ?? pdokAnswer(AMERSFOORT));
+    }
+    log.push(`overpass ${new URL(url).host}`);
     if (options.overpass === "down") return new Response("busy", { status: 429 });
     return Response.json({ elements: [{ type: "node", id: 1 }, { type: "node", id: 2 }] });
   }) as typeof fetch;
@@ -117,7 +120,7 @@ describe("search", () => {
     assert.deepEqual(log, [
       "fetch api.pdok.nl",
       "missing 4000 default",
-      "fetch overpass-api.de",
+      "overpass maps.mail.ru",
       "record 2 2",
       "import 2 2",
     ]);
@@ -131,7 +134,7 @@ describe("search", () => {
     const { call, log } = fakes({ missing: [], places: [{ id: 1 }] });
     const result = await call({ q: "amersfoort" });
     assert.equal(result.body.search.status, "cached");
-    assert.ok(!log.some((line) => line.includes("overpass")));
+    assert.ok(!log.some((line) => line.startsWith("overpass ")));
   });
 
   it("fetches at most MAX_CELLS cells at a time", async () => {
@@ -152,8 +155,10 @@ describe("search", () => {
     const { call, log } = fakes({ missing: [cell(2607, 179)], overpass: "down" });
     const result = await call({ q: "amersfoort" });
     assert.deepEqual(result, { status: 502, body: { error: "fetch_failed" } });
-    assert.ok(log.includes("fetch overpass-api.de"));
-    assert.ok(log.includes("fetch overpass.private.coffee"));
+    assert.deepEqual(
+      log.filter((line) => line.startsWith("overpass ")),
+      ["overpass maps.mail.ru", "overpass maps.mail.ru", "overpass overpass.private.coffee", "overpass overpass-api.de"],
+    );
     assert.ok(log.includes("record 1 0"), "failed attempts count towards the limit");
   });
 
@@ -167,7 +172,7 @@ describe("search", () => {
   it("stops fetching when everyone together asked too much", async () => {
     const { call, log } = fakes({ missing: [cell(2607, 179)], fetchesSince: MAX_FETCHES });
     assert.deepEqual(await call({ q: "amersfoort" }), { status: 429, body: { error: "busy" } });
-    assert.ok(!log.some((line) => line.includes("overpass")));
+    assert.ok(!log.some((line) => line.startsWith("overpass ")));
   });
 
   it("refreshes the cell of a reported place, at most hourly", async () => {

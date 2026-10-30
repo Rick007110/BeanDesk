@@ -41,7 +41,7 @@ De logica in `core` test je zo:
 
 ### Releases
 
-Elke push naar `main` zet een pre-release met een installeerbare APK onder [Releases](https://github.com/Rick007110/BeanDesk/releases); de nieuwste tien blijven staan. Een tag zoals `v0.2.0` levert een gewone release op, een tag met achtervoegsel zoals `v0.2.0-test.1` een pre-release. Open de APK op je telefoon of sleep hem op een emulator. Elke build heeft een hoger versienummer en dezelfde debug-sleutel (`app/debug.keystore`, niet geheim). Daardoor installeer je hem over de vorige heen, ook over een build uit Android Studio.
+Elke push naar `main` zet een pre-release met een installeerbare APK onder [Releases](https://github.com/Rick007110/BeanDesk/releases); de nieuwste tien blijven staan. Een tag zoals `v0.2.0` levert een gewone release op, een tag met achtervoegsel zoals `v0.2.0-test.1` een pre-release. Zonder tag kan het ook: start de workflow "Release" met de hand (Actions → Release → Run workflow) en vink "release" aan. Dan wordt de versie uit `beandesk.versionName` in `gradle.properties` een gewone release, met de tag erbij. Open de APK op je telefoon of sleep hem op een emulator. Elke build heeft een hoger versienummer en dezelfde debug-sleutel (`app/debug.keystore`, niet geheim). Daardoor installeer je hem over de vorige heen, ook over een build uit Android Studio.
 
 Voor de Play Store komt er later een release-build met een eigen uploadsleutel; de debug-sleutel is daar niet voor bedoeld.
 
@@ -117,7 +117,7 @@ De edge function:
 
 1. zoekt de tekst één keer op bij de [PDOK Locatieserver](https://api.pdok.nl/bzk/locatieserver/search/v3_1/ui/) en bewaart het antwoord in `geocode_cache`. Een plaats krijgt een straal van 4 km, een straat 2 km, een adres of postcode 1,5 km;
 2. deelt de wereld op in vakjes van 0,02° bij 0,03° (ongeveer 2 bij 2 km) en kijkt in `osm_cells` welke vakjes in die straal nog nooit, of langer dan 30 dagen geleden, uit OpenStreetMap zijn gehaald;
-3. haalt alleen die vakjes op bij Overpass (hooguit 48 per keer, de dichtstbijzijnde eerst) en slaat ze op met `import_osm_area()`, met dezelfde regels als de stadsimport;
+3. haalt alleen die vakjes op bij Overpass (hooguit 48 per keer, de dichtstbijzijnde eerst) en slaat ze op met `import_osm_area()`, met dezelfde regels als de stadsimport. overpass-api.de blokkeert het netwerk van Supabase (elk verzoek krijgt 406), dus de functie vraagt het eerst twee keer aan de server van VK (maps.mail.ru), daarna aan overpass.private.coffee en pas als laatste aan overpass-api.de;
 4. antwoordt met `area_export()`: hetzelfde formaat als de stad-export, dichtstbijzijnde eerst, plus `radius_m` en `search`.
 
 Na een melding vraagt de app de functie om het vakje van die plek opnieuw op te halen, als dat langer dan een uur geleden is. Zo komen verbeteringen in OpenStreetMap snel binnen. Alle gebruikers samen starten hooguit 30 Overpass-aanvragen per 10 minuten (`osm_fetches`). Lukt Overpass niet, dan antwoordt de functie met wat er al in de database staat en probeert hij het bij de volgende zoekopdracht opnieuw.

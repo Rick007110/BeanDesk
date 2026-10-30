@@ -2,12 +2,19 @@ name: Release
 
 # Every push to main publishes a pre-release with an installable APK under Releases.
 # A tag such as v0.2.0 publishes a normal release; a tag with a suffix such as v0.2.0-test.1
-# publishes a pre-release. Of the build-* pre-releases, the newest 10 stay.
+# publishes a pre-release. Run by hand with "release" ticked, it publishes the version in
+# gradle.properties (beandesk.versionName) as a normal release, tag included.
+# Of the build-* pre-releases, the newest 10 stay.
 on:
   push:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publiceer beandesk.versionName als gewone release (anders een testbuild)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -34,9 +41,15 @@ jobs:
 
       - name: Versie bepalen
         id: version
+        env:
+          RELEASE_INPUT: ${{ inputs.release }}
         run: |
           base=$(grep '^beandesk.versionName=' gradle.properties | cut -d= -f2)
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          if [[ "$RELEASE_INPUT" == "true" ]]; then
+            name="$base"
+            echo "tag=v$base" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             name="${GITHUB_REF_NAME#v}"
             echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
             # v0.2.0 is a release, v0.2.0-test.1 a pre-release.
@@ -67,7 +80,11 @@ jobs:
         run: |
           previous=$(git tag --list 'build-*' --sort=-v:refname | grep -vx "$TAG" | head -n 1 || true)
           {
-            echo "Testbuild van \`${GITHUB_SHA::7}\`, versie $VERSION_NAME. Download de APK hieronder en open hem op je telefoon of sleep hem op een emulator."
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "Testbuild van \`${GITHUB_SHA::7}\`, versie $VERSION_NAME. Download de APK hieronder en open hem op je telefoon of sleep hem op een emulator."
+            else
+              echo "BeanDesk $VERSION_NAME (\`${GITHUB_SHA::7}\`). Download de APK hieronder en open hem op je telefoon."
+            fi
             echo
             if grep -q '^beandesk.useSampleData=true' gradle.properties; then
               echo "**Data:** de ingebouwde voorbeeldset met verzonnen zaken in Utrecht; meldingen blijven op de telefoon."
