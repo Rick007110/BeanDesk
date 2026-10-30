@@ -59,14 +59,10 @@ class PlacesScreenTest {
         compose.setContent {
             BeanDeskTheme { PlacesScreen(viewModel, AppIconManager(context)) }
         }
-        waitForText("Koffie & Werk")
+        // The count above the list shows once the places are in (12 in the sample, one reported
+        // closed); a given card may be further down, depending on which places are open right now.
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("11 plekken").fetchSemanticsNodes().isNotEmpty() }
     }
-
-    private fun waitForText(text: String) =
-        compose.waitUntil(10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun waitForNoText(text: String) =
-        compose.waitUntil(10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty() }
 
     private val searchField get() = compose.onNode(hasSetTextAction())
 
@@ -82,8 +78,9 @@ class PlacesScreenTest {
     fun typingNarrowsTheListToMatchingNames() {
         showScreen()
         searchField.performTextInput("koffiehuis")
-        // "Koffie & Werk" is the first card at the start; it does not match.
-        waitForNoText("Koffie & Werk")
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("1 van 11 plekken").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Koffiehuis Science Park").assertExists()
     }
 
@@ -102,7 +99,7 @@ class PlacesScreenTest {
         }
         compose.onNodeWithText("Koffie & Werk").assertExists()
         compose.onNodeWithText("Stadsbibliotheek Centrum").assertExists()
-        compose.onNodeWithText("2 plekken", substring = true).assertExists()
+        compose.onNodeWithText("2 plekken").assertExists()
         assertEquals(listOf("Amersfoort"), search.queries)
     }
 
