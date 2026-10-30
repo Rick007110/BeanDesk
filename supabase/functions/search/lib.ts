@@ -112,7 +112,7 @@ export function overpassQuery(cells: Cell[]): string {
   const boxes = cells
     .map((c) => `nwr["amenity"~"^(cafe|library|coworking_space)$"](${bound(c.south)},${bound(c.west)},${bound(c.north)},${bound(c.east)});`)
     .join("");
-  return `[out:json][timeout:40];(${boxes});out center tags;`;
+  return `[out:json][timeout:25];(${boxes});out center tags;`;
 }
 
 export interface SearchRequest {

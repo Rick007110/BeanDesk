@@ -37,16 +37,14 @@ export const FETCH_WINDOW_MS = 10 * 60 * 1000;
 /** After a report, the surroundings of the place are fetched again unless that happened this recently. */
 export const REFRESH_MAX_AGE = "1 hour";
 
-// Tried in this order, each with its own time limit; together they stay within the 150 seconds
-// an edge function may take. The public servers are busy: maps.mail.ru answers most requests
-// but now and then times out, so it gets a second try. overpass-api.de answers every request
-// from Supabase's network with 406 (an IP block, also on /api/status), so it comes last.
-const MAIL_RU = "https://maps.mail.ru/osm/tools/overpass/api/interpreter";
+// Tried in this order, each with its own time limit, so a search never waits much longer than
+// half a minute: someone is looking at a spinner. The public servers are busy, and when they
+// fail the search still answers with what the database has. overpass-api.de answers every
+// request from Supabase's network with 406 (an IP block, also on /api/status), so it comes last.
 const OVERPASS_ENDPOINTS = [
-  { url: MAIL_RU, timeoutMs: 45_000 },
-  { url: MAIL_RU, timeoutMs: 45_000 },
-  { url: "https://overpass.private.coffee/api/interpreter", timeoutMs: 25_000 },
-  { url: "https://overpass-api.de/api/interpreter", timeoutMs: 10_000 },
+  { url: "https://maps.mail.ru/osm/tools/overpass/api/interpreter", timeoutMs: 25_000 },
+  { url: "https://overpass.private.coffee/api/interpreter", timeoutMs: 8_000 },
+  { url: "https://overpass-api.de/api/interpreter", timeoutMs: 3_000 },
 ];
 const USER_AGENT = "BeanDesk-search/0.1 (+https://github.com/Rick007110/BeanDesk)";
 

@@ -101,6 +101,7 @@ fun PlacesScreen(viewModel: PlacesViewModel, appIconManager: AppIconManager) {
 
     PlacesContent(
         state = state,
+        searchText = viewModel.searchText,
         snackbarHostState = snackbarHostState,
         appIcon = appIcon,
         onAppIconChange = { icon ->
@@ -136,6 +137,8 @@ private val PlacesMessage.textRes: Int
 @Composable
 private fun PlacesContent(
     state: PlacesUiState,
+    // Separate from [state], which lags behind while typing (see PlacesViewModel.searchText).
+    searchText: String,
     snackbarHostState: SnackbarHostState,
     appIcon: AppIcon,
     onAppIconChange: (AppIcon) -> Unit,
@@ -209,7 +212,7 @@ private fun PlacesContent(
                     },
                 )
                 SearchField(
-                    text = state.searchText,
+                    text = searchText,
                     canSearchAreas = state.canSearchAreas,
                     onTextChange = onSearchTextChange,
                     onSearch = onSearchArea,
@@ -280,7 +283,7 @@ private fun PlacesContent(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                     header = listHeader(
-                        searchText = state.searchText.takeIf { state.canSearchAreas && it.trim().length >= 2 },
+                        searchText = searchText.takeIf { state.canSearchAreas && it.trim().length >= 2 },
                         isSearching = state.isSearching,
                         onSearchArea = onSearchArea,
                         showLocationPrompt = !locationPromptDismissed && locationAccess != LocationAccess.PRECISE,

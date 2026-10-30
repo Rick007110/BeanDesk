@@ -157,7 +157,7 @@ describe("search", () => {
     assert.deepEqual(result, { status: 502, body: { error: "fetch_failed" } });
     assert.deepEqual(
       log.filter((line) => line.startsWith("overpass ")),
-      ["overpass maps.mail.ru", "overpass maps.mail.ru", "overpass overpass.private.coffee", "overpass overpass-api.de"],
+      ["overpass maps.mail.ru", "overpass overpass.private.coffee", "overpass overpass-api.de"],
     );
     assert.ok(log.includes("record 1 0"), "failed attempts count towards the limit");
   });
