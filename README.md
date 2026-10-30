@@ -65,9 +65,7 @@ De edge function zet je neer met:
 supabase functions deploy search
 ```
 
-Migratie `20261030000000_search_areas` is via de SQL-editor in het dashboard gedraaid. Hij staat daarom niet in de migratiegeschiedenis van het project; `supabase db push` probeert hem dan opnieuw, en dat mislukt omdat de tabellen al bestaan. Markeer hem één keer als gedaan met `supabase migration repair --status applied 20261030000000`.
-
-Voor `20261030160000_dayparts_and_account_deletion` en `20261030200000_delta_sync_and_account_cleanup` geldt hetzelfde als je ze in de SQL-editor plakt: markeer ze daarna met `supabase migration repair --status applied <versie>`. Zonder de eerste blijft "drukte per dagdeel" leeg en mislukt "account verwijderen" in de app met een foutmelding. Zonder de tweede haalt de app steeds de hele stad, blijven lege anonieme accounts staan en werkt `seed-import` niet.
+Een paar migraties zijn met de hand in de SQL-editor van het dashboard gedraaid (`20261030000000`, `20261030160000` en `20261030200000`) en daarna in de migratiegeschiedenis gezet, zodat `supabase db push` ze niet opnieuw probeert. Plak je later weer een migratie met de hand, markeer hem dan met `supabase migration repair --status applied <versie>`.
 
 Anoniem inloggen moet aan staan (Authentication → Sign In / Providers → "Allow anonymous sign-ins"); daarzonder werkt het melden niet. In `supabase/config.toml` staat het voor lokaal gebruik al aan.
 
