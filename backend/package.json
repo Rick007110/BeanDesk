@@ -1,0 +1,16 @@
+{
+  "name": "beandesk-backend",
+  "private": true,
+  "description": "BeanDesk's API on the own server: the city export, search, accounts and reports, on top of the database functions in database/migrations.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test --test-concurrency=1 \"test/*.test.ts\""
+  },
+  "dependencies": {
+    "pg": "8.23.1"
+  }
+}

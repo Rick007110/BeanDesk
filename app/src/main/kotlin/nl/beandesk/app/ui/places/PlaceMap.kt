@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +50,7 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
 import org.maplibre.android.geometry.LatLng as MapLatLng
 
+private const val TAG = "PlaceMap"
 private const val SOURCE_ID = "places"
 private const val LAYER_ID = "places-circles"
 private const val RATING_LAYER_ID = "places-ratings"
@@ -63,7 +65,8 @@ private const val PLACE_ZOOM = 15.5
 /**
  * MapLibre map with one circle per place and a blue dot for the user. The camera starts on
  * [center], again whenever [areaKey] changes (a search), moves to [focus] whenever that
- * changes, and to [userLocation] each time [recenterRequests] goes up.
+ * changes, and to [userLocation] each time [recenterRequests] goes up. When [styleUrl] does not
+ * load, the map uses [fallbackStyleUrl], another provider, for as long as it is shown.
  */
 @Composable
 fun PlaceMap(
@@ -74,6 +77,7 @@ fun PlaceMap(
     userLocation: LatLng?,
     recenterRequests: Int,
     styleUrl: String,
+    fallbackStyleUrl: String,
     onPlaceClick: (Long?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -87,42 +91,18 @@ fun PlaceMap(
 
     MapLifecycle(mapView)
 
-    LaunchedEffect(mapView, styleUrl) {
+    var styleFailed by remember { mutableStateOf(false) }
+    DisposableEffect(mapView) {
+        val listener = MapView.OnDidFailLoadingMapListener { message ->
+            Log.w(TAG, "Map style did not load: $message")
+            styleFailed = true
+        }
+        mapView.addOnDidFailLoadingMapListener(listener)
+        onDispose { mapView.removeOnDidFailLoadingMapListener(listener) }
+    }
+
+    LaunchedEffect(mapView) {
         mapView.getMapAsync { loadedMap ->
-            loadedMap.setStyle(styleUrl) { loadedStyle ->
-                loadedStyle.addSource(GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
-                loadedStyle.addLayer(
-                    CircleLayer(LAYER_ID, SOURCE_ID).withProperties(
-                        circleRadius(7f),
-                        circleColor("#6F4E37"),
-                        circleStrokeWidth(2f),
-                        circleStrokeColor("#FFFFFF"),
-                    ),
-                )
-                // "★ 4,3" next to rated places; the label images are added per value (see below).
-                loadedStyle.addLayer(
-                    SymbolLayer(RATING_LAYER_ID, SOURCE_ID)
-                        .withFilter(has(RATING))
-                        .withProperties(
-                            iconImage(concat(literal(RATING_IMAGE_PREFIX), get(RATING))),
-                            iconAnchor(Property.ICON_ANCHOR_BOTTOM_LEFT),
-                            iconOffset(arrayOf(4f, -4f)),
-                            iconAllowOverlap(true),
-                            iconIgnorePlacement(true),
-                        ),
-                )
-                // Added last, so the user's dot is drawn on top of the places.
-                loadedStyle.addSource(GeoJsonSource(USER_SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
-                loadedStyle.addLayer(
-                    CircleLayer(USER_LAYER_ID, USER_SOURCE_ID).withProperties(
-                        circleRadius(8f),
-                        circleColor("#1A73E8"),
-                        circleStrokeWidth(3f),
-                        circleStrokeColor("#FFFFFF"),
-                    ),
-                )
-                style = loadedStyle
-            }
             loadedMap.addOnMapClickListener { point ->
                 val screenPoint = loadedMap.projection.toScreenLocation(point)
                 val feature = loadedMap.queryRenderedFeatures(screenPoint, LAYER_ID).firstOrNull()
@@ -130,6 +110,47 @@ fun PlaceMap(
                 feature != null
             }
             map = loadedMap
+        }
+    }
+
+    // A new style (light or dark, or the fallback) starts without our layers; they are added again.
+    val activeStyleUrl = if (styleFailed) fallbackStyleUrl else styleUrl
+    LaunchedEffect(map, activeStyleUrl) {
+        val loadedMap = map ?: return@LaunchedEffect
+        style = null
+        loadedMap.setStyle(activeStyleUrl) { loadedStyle ->
+            loadedStyle.addSource(GeoJsonSource(SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
+            loadedStyle.addLayer(
+                CircleLayer(LAYER_ID, SOURCE_ID).withProperties(
+                    circleRadius(7f),
+                    circleColor("#6F4E37"),
+                    circleStrokeWidth(2f),
+                    circleStrokeColor("#FFFFFF"),
+                ),
+            )
+            // "★ 4,3" next to rated places; the label images are added per value (see below).
+            loadedStyle.addLayer(
+                SymbolLayer(RATING_LAYER_ID, SOURCE_ID)
+                    .withFilter(has(RATING))
+                    .withProperties(
+                        iconImage(concat(literal(RATING_IMAGE_PREFIX), get(RATING))),
+                        iconAnchor(Property.ICON_ANCHOR_BOTTOM_LEFT),
+                        iconOffset(arrayOf(4f, -4f)),
+                        iconAllowOverlap(true),
+                        iconIgnorePlacement(true),
+                    ),
+            )
+            // Added last, so the user's dot is drawn on top of the places.
+            loadedStyle.addSource(GeoJsonSource(USER_SOURCE_ID, FeatureCollection.fromFeatures(emptyList())))
+            loadedStyle.addLayer(
+                CircleLayer(USER_LAYER_ID, USER_SOURCE_ID).withProperties(
+                    circleRadius(8f),
+                    circleColor("#1A73E8"),
+                    circleStrokeWidth(3f),
+                    circleStrokeColor("#FFFFFF"),
+                ),
+            )
+            style = loadedStyle
         }
     }
 

@@ -49,4 +49,6 @@ data class CityEntity(
     val attribution: String,
     val centerLat: Double?,
     val centerLng: Double?,
+    // The generatedAt of the last whole download; in between, only changes are downloaded.
+    val fullSyncedAt: String,
 )

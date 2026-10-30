@@ -23,10 +23,12 @@ android {
         versionCode = providers.gradleProperty("beandesk.versionCode").orNull?.toInt() ?: 1
         versionName = beanDeskProperty("versionName")
 
-        // Empty until there is a Supabase project; the anon key is public by design.
-        buildConfigField("String", "SUPABASE_URL", "\"${beanDeskProperty("supabaseUrl").trimEnd('/')}\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${beanDeskProperty("supabaseAnonKey")}\"")
+        // BeanDesk's own server (backend/, docs/vps.md).
+        buildConfigField("String", "API_URL", "\"${beanDeskProperty("apiUrl").trimEnd('/')}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${beanDeskProperty("mapStyleUrl")}\"")
+        buildConfigField("String", "MAP_STYLE_DARK_URL", "\"${beanDeskProperty("mapStyleDarkUrl")}\"")
+        buildConfigField("String", "MAP_FALLBACK_STYLE_URL", "\"${beanDeskProperty("mapFallbackStyleUrl")}\"")
+        buildConfigField("String", "MAP_FALLBACK_STYLE_DARK_URL", "\"${beanDeskProperty("mapFallbackStyleDarkUrl")}\"")
         buildConfigField("String", "DEFAULT_CITY", "\"${beanDeskProperty("defaultCity")}\"")
 
         // UI tests on an emulator (src/androidTest), run in CI.
@@ -92,14 +94,11 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
 
-    implementation(platform(libs.supabase.bom))
-    implementation(libs.supabase.auth)
-    implementation(libs.supabase.postgrest)
-
     implementation(libs.maplibre.android)
     implementation(libs.play.services.location)
 
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.ktor.client.mock)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

@@ -289,7 +289,6 @@ class PlacesViewModel(
             flags.update { it.copy(isSendingReport = false) }
             messageChannel.send(message)
             onDone(message == PlacesMessage.REPORT_SENT || message == PlacesMessage.REPORT_SAVED_LOCALLY)
-            if (message == PlacesMessage.REPORT_SENT) repository.refreshAround(report.placeId)
         }
     }
 

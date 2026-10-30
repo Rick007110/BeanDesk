@@ -75,6 +75,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import nl.beandesk.app.BuildConfig
 import nl.beandesk.app.R
+import nl.beandesk.app.ui.theme.LocalDarkTheme
 import nl.beandesk.app.icon.AppIcon
 import nl.beandesk.app.icon.AppIconManager
 import nl.beandesk.core.filter.PlaceFilter
@@ -266,7 +267,12 @@ private fun PlacesContent(
                     focus = state.focus,
                     userLocation = state.userLocation,
                     recenterRequests = recenterRequests,
-                    styleUrl = BuildConfig.MAP_STYLE_URL,
+                    styleUrl = if (LocalDarkTheme.current) BuildConfig.MAP_STYLE_DARK_URL else BuildConfig.MAP_STYLE_URL,
+                    fallbackStyleUrl = if (LocalDarkTheme.current) {
+                        BuildConfig.MAP_FALLBACK_STYLE_DARK_URL
+                    } else {
+                        BuildConfig.MAP_FALLBACK_STYLE_URL
+                    },
                     onPlaceClick = selectPlace,
                     modifier = Modifier.fillMaxSize(),
                 )

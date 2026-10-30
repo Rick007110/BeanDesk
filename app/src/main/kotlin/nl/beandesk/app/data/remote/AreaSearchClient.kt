@@ -3,12 +3,10 @@ package nl.beandesk.app.data.remote
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.timeout
-import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.CancellationException
@@ -20,13 +18,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import nl.beandesk.core.export.CityExport
 import nl.beandesk.core.export.CityExportParser
 
-/** Calls the edge function `search` with the anon key, like the city export. */
-class AreaSearchClient(
-    private val http: HttpClient,
-    supabaseUrl: String,
-    private val anonKey: String,
-) : AreaSearchSource {
-    private val url = "$supabaseUrl/functions/v1/search"
+/** Searches through BeanDesk's server (backend/, POST /v1/search). */
+class AreaSearchClient(private val http: HttpClient, apiUrl: String) : AreaSearchSource {
+    private val url = "${apiUrl.trimEnd('/')}/v1/search"
 
     override suspend fun search(query: String): SearchResult {
         val body = try {
@@ -43,26 +37,20 @@ class AreaSearchClient(
         return SearchResult(CityExportParser.parse(body), byName = kind == "naam")
     }
 
-    override suspend fun refreshAround(placeId: Long) {
-        post(buildJsonObject { put("refresh_place_id", JsonPrimitive(placeId)) }.toString())
-    }
-
     private suspend fun post(json: String): String =
         http.post(url) {
-            // The first search of an area waits for OpenStreetMap, which can take a while.
+            // A lookup at PDOK and a database query: seconds, but give a slow network some room.
             timeout {
-                requestTimeoutMillis = 60_000
-                socketTimeoutMillis = 60_000
+                requestTimeoutMillis = 20_000
+                socketTimeoutMillis = 20_000
             }
-            header("apikey", anonKey)
-            header(HttpHeaders.Authorization, "Bearer $anonKey")
             contentType(ContentType.Application.Json)
             setBody(json)
         }.bodyAsText()
 
     private fun HttpStatusCode.toFailure(): SearchFailure = when (this) {
         HttpStatusCode.NotFound -> SearchFailure.NOT_FOUND
-        // 429: everyone together asked OpenStreetMap too much; 502: it could not be reached.
+        // 429: too many searches from this address; 502: the address lookup (PDOK) could not be reached.
         HttpStatusCode.TooManyRequests, HttpStatusCode.BadGateway -> SearchFailure.UNAVAILABLE
         else -> SearchFailure.FAILED
     }

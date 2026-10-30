@@ -8,7 +8,7 @@ import nl.beandesk.core.export.CityExportParser
 
 /**
  * Reads `assets/sample/<city>.json`, which only debug builds contain (app/src/debug/assets).
- * Lets the app be tried on an emulator before there is a Supabase project.
+ * Lets the app be tried on an emulator without the server.
  */
 class SampleCityExportSource(private val assets: AssetManager) : CityExportSource {
     override suspend fun fetch(city: String): CityExport = withContext(Dispatchers.IO) {

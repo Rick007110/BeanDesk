@@ -53,10 +53,16 @@ private val DarkStatus = StatusColors(
 
 val LocalStatusColors = staticCompositionLocalOf { LightStatus }
 
+/** Whether the app is dark now: as the phone, or as chosen in the profile. For the map style. */
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
 @Composable
 fun BeanDeskTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     val dark = darkTheme
-    CompositionLocalProvider(LocalStatusColors provides if (dark) DarkStatus else LightStatus) {
+    CompositionLocalProvider(
+        LocalStatusColors provides if (dark) DarkStatus else LightStatus,
+        LocalDarkTheme provides dark,
+    ) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,
             content = content,

@@ -16,8 +16,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import nl.beandesk.app.BeanDeskApplication
+import nl.beandesk.app.data.remote.ApiBackend
 import nl.beandesk.app.data.remote.Contribution
-import nl.beandesk.app.data.remote.SupabaseBackend
 
 data class ProfileUiState(
     // False with sample data: then nothing leaves the phone and there is no account.
@@ -33,7 +33,7 @@ data class ProfileUiState(
 enum class ProfileMessage { ACCOUNT_DELETED, DELETE_FAILED }
 
 /** The user's own reports and stars, and deleting the account. [backend] is null with sample data. */
-class ProfileViewModel(private val backend: SupabaseBackend?) : ViewModel() {
+class ProfileViewModel(private val backend: ApiBackend?) : ViewModel() {
     private val mutableState = MutableStateFlow(ProfileUiState(sendsReports = backend != null, isLoading = backend != null))
     val state: StateFlow<ProfileUiState> = mutableState.asStateFlow()
 

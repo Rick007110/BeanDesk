@@ -59,6 +59,19 @@ class CityExportParserTest {
     }
 
     @Test
+    fun `changes since an earlier export, with the places that are gone`() {
+        val changes = sample
+            .replace("\"generated_at\": \"2026-10-29T03:17:00+00:00\",", "\"generated_at\": \"2026-10-29T03:17:00+00:00\", \"since\": \"2026-10-28T03:17:00+00:00\", \"removed\": [7, 9],")
+        val export = CityExportParser.parse(changes)
+        assertEquals("2026-10-28T03:17:00+00:00", export.since)
+        assertEquals(listOf(7L, 9L), export.removed)
+
+        val full = CityExportParser.parse(sample)
+        assertNull(full.since)
+        assertEquals(emptyList(), full.removed)
+    }
+
+    @Test
     fun `rejects a newer export version`() {
         val newer = sample.replaceFirst("\"version\": 1", "\"version\": 2")
         assertFailsWith<UnsupportedExportException> { CityExportParser.parse(newer) }

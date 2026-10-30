@@ -6,21 +6,26 @@ Android-app die laat zien welke koffiezaak, bibliotheek of coworkingruimte in de
 
 ## Hoe het in elkaar zit
 
-De backend is het Supabase-project **BeanDesk** (Frankfurt). Alles wat met data gebeurt, staat als functie in de database:
+De backend draait op een eigen VPS: Postgres met PostGIS, een kleine API in Node (`backend/`) en Caddy voor HTTPS op een DuckDNS-adres. Hoe dat staat, staat in [docs/vps.md](docs/vps.md). Alles wat met data gebeurt, staat als functie in de database (`database/migrations`); de API wisselt per aanvraag naar de juiste rol, zodat de regels in de database gelden:
 
-- **Import:** `import_city()` haalt de zaken van een stad uit OpenStreetMap (via de `http`-extensie) en `import_osm_elements()` past de regels toe: wat geen werkplek is valt af, verdwenen zaken krijgen een `deleted_at`. `pg_cron` doet dit elke maandag om 03:17 UTC voor de steden met `active = true` in de tabel `cities`.
-- **Stad-export:** `city_export()` bouwt per stad één JSON met alle zichtbare plekken en de laatste meldingen.
-- **Zoeken:** de edge function `search` (`supabase/functions/search`) zoekt een plaats, adres of postcode op bij PDOK en geeft de plekken eromheen. Wie als eerste een gebied zoekt, laat het ophalen uit OpenStreetMap en opslaan; daarna komt het voor iedereen direct uit de database. Zie [Zoeken](#zoeken).
-- **De app:** haalt die export in één keer op, bewaart hem in Room en filtert en sorteert daarna alleen op de telefoon. Meldingen gaan als anonieme gebruiker rechtstreeks naar `place_reports`.
+- **Import:** elke nacht maakt de GitHub Action `osm-data.yml` uit de Geofabrik-extract van Nederland een bestand met alle cafés, bibliotheken en coworkings, met de gemeente waarin ze liggen (`importer/beandesk_import/osm_extract.py`). Om 05:23 UTC haalt de API het op en geeft het aan `import_osm_extract()`, die de regels toepast: wat geen werkplek is valt af, verdwenen zaken krijgen een `deleted_at`. De gemeente wordt de stad van een plek, als die in de tabel `cities` staat.
+- **Stad-export:** `city_export()` bouwt per stad één JSON met alle zichtbare plekken en de laatste meldingen; `city_changes()` alleen wat sinds een vorige download veranderde.
+- **Zoeken:** de API zoekt een plaats, adres of postcode op bij PDOK en geeft de plekken eromheen uit de database (`backend/src/search`). Zie [Zoeken](#zoeken).
+- **Accounts en meldingen:** de eerste melding maakt een anoniem account; de app bewaart het token ervan. Meldingen en sterren gaan via de API naar `place_reports` en `place_ratings`, als die gebruiker, zodat de RLS-regels gelden.
+- **De app:** haalt de export op, bewaart hem in Room en filtert en sorteert daarna alleen op de telefoon.
 
-De locatie van de gebruiker gaat dus nergens heen: bij zoeken verstuurt de app alleen de getypte tekst. De app zelf doet geen calls naar Overpass, PDOK of Google.
+De locatie van de gebruiker gaat dus nergens heen: bij zoeken verstuurt de app alleen de getypte tekst. De app zelf doet geen calls naar PDOK of Google.
 
 | Map | Inhoud |
 | --- | --- |
 | `app/` | Android-app: Kotlin, Jetpack Compose, MapLibre, Room, Ktor |
 | `core/` | Logica zonder Android: openingstijden, filters, afstand, routelink en het inlezen van de stad-export. Kan later naar Kotlin Multiplatform als er een iOS-app komt. |
-| `supabase/` | Migraties (schema, RLS-regels, triggers, import, export, de wekelijkse taak) en de edge function `search` |
-| `importer/` | Kleine Python-CLI om die databasefuncties aan te roepen, plus de databasetests |
+| `database/` | De migraties (schema, RLS-regels, triggers, import, export) en `platform.sql` met de rollen en accounts eromheen |
+| `backend/` | De API in Node: export, zoeken, accounts, meldingen en de nachtelijke taken; draait in Docker op de VPS |
+| `deploy/` | Docker Compose met de API en Caddy, en `migrate.sh` voor de database |
+| `importer/` | Kleine Python-CLI om die databasefuncties aan te roepen (ook voor seeding), plus de databasetests |
+| `docs/seeding/` | Checklist om een buurt te vullen met echte bezoeken |
+| `docs/vps.md` | De backend naar de eigen VPS: wat er draait, wat de app aanroept, hoe je het controleert |
 | `.github/workflows/` | CI en de releases met APK |
 | `docs/brand/` | Logo, kleuren en het script dat alle logobestanden maakt |
 
@@ -30,7 +35,7 @@ De locatie van de gebruiker gaat dus nergens heen: bij zoeken verstuurt de app a
 
 Nodig: een recente Android Studio en JDK 21.
 
-1. Open de map in Android Studio en start de app op een emulator of telefoon. Hij gebruikt het Supabase-project uit `gradle.properties`; de anon key is bedoeld om in apps te staan.
+1. Open de map in Android Studio en start de app op een emulator of telefoon. Hij gebruikt de server uit `beandesk.apiUrl` in `gradle.properties`.
 2. Zonder internet of om iets los van de echte data te proberen: zet `beandesk.useSampleData=true`. Dan toont een debug-build twaalf verzonnen zaken in Utrecht (`app/src/debug/assets/sample/utrecht.json`) en blijven meldingen op de telefoon.
 
 De logica in `core` test je zo:
@@ -45,36 +50,19 @@ Elke push naar `main` zet een pre-release met een installeerbare APK onder [Rele
 
 Voor de Play Store komt er later een release-build met een eigen uploadsleutel; de debug-sleutel is daar niet voor bedoeld.
 
-### Supabase
+### Backend
 
-Het project `hsjufnfhhiowwaiyvcvx` draait in Frankfurt; de migraties in `supabase/migrations` staan erin, met dezelfde versienummers. Nieuwe migraties zet je erbij met:
-
-```bash
-supabase link --project-ref hsjufnfhhiowwaiyvcvx
-```
+De API staat in `backend/` en draait met Node 22.18 of nieuwer (Node voert de TypeScript direct uit). Neerzetten en bijwerken op de VPS: zie [docs/vps.md](docs/vps.md). De tests draaien tegen een PostGIS-database die weg mag, net als de Python-tests:
 
 ```bash
-supabase db push
+cd backend && npm ci && BEANDESK_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/beandesk_test npm test
 ```
 
-De edge function zet je neer met:
-
-```bash
-supabase functions deploy search
-```
-
-Migratie `20261030000000_search_areas` is via de SQL-editor in het dashboard gedraaid. Hij staat daarom niet in de migratiegeschiedenis van het project; `supabase db push` probeert hem dan opnieuw, en dat mislukt omdat de tabellen al bestaan. Markeer hem één keer als gedaan met `supabase migration repair --status applied 20261030000000`.
-
-Voor `20261030160000_dayparts_and_account_deletion` geldt hetzelfde als je hem in de SQL-editor plakt: markeer hem daarna met `supabase migration repair --status applied 20261030160000`. Zonder deze migratie blijft "drukte per dagdeel" leeg en mislukt "account verwijderen" in de app met een foutmelding.
-
-Anoniem inloggen moet aan staan (Authentication → Sign In / Providers → "Allow anonymous sign-ins"); daarzonder werkt het melden niet. In `supabase/config.toml` staat het voor lokaal gebruik al aan.
-
-Handige SQL in de SQL-editor:
+Handige SQL op de VPS (`sudo -u postgres psql beandesk`):
 
 ```sql
-select public.import_city('utrecht');                           -- nu importeren
-update public.cities set active = true where slug = 'groningen';  -- stad toevoegen aan de wekelijkse import
-update public.places set hidden = true where id = 123;            -- een kroeg die als café getagd is verbergen
+insert into public.cities (slug, name) values ('breda', 'Breda');  -- een stad met een eigen export; de naam is de gemeente
+update public.places set hidden = true where id = 123;             -- een kroeg die als café getagd is verbergen
 ```
 
 ### Python-CLI en databasetests
@@ -83,17 +71,17 @@ update public.places set hidden = true where id = 123;            -- een kroeg d
 cd importer && python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
 ```
 
-Met `DATABASE_URL` (in Supabase de connection string "Session pooler") roep je de databasefuncties aan:
+Met `DATABASE_URL` (op de VPS als de gebruiker `postgres`: `postgresql:///beandesk`) roep je de databasefuncties aan:
 
 ```bash
-python -m beandesk_import import utrecht
+python -m beandesk_import import-extract nl-places.json
 ```
 
 ```bash
 python -m beandesk_import export utrecht --out-dir out
 ```
 
-Met `--overpass-file` importeer je een opgeslagen Overpass-antwoord in plaats van de live API.
+`nl-places.json` staat onder de release [osm-nl](https://github.com/Rick007110/BeanDesk/releases/tag/osm-nl); de database haalt hem elke nacht zelf op.
 
 De tests draaien met `pytest` en testen de SQL-functies zelf. Ze hebben `BEANDESK_TEST_DATABASE_URL` nodig, met een PostGIS-database die weg mag: ze gooien de schema's leeg en zetten de migraties opnieuw neer.
 
@@ -121,22 +109,9 @@ Het zoekveld boven de lijst:
 
   Het veld leegmaken of het chipje met de plaatsnaam brengt je terug naar de stad.
 
-De edge function:
+De API zoekt de tekst één keer op bij de [PDOK Locatieserver](https://api.pdok.nl/bzk/locatieserver/search/v3_1/ui/) en bewaart het antwoord in `geocode_cache`. Een plaats krijgt een straal van 4 km, een straat 2 km, een adres of postcode 1,5 km. Daarna antwoordt hij met `area_export()` (of `find_by_name()` voor een naam): hetzelfde formaat als de stad-export, dichtstbijzijnde eerst, plus `radius_m` en `search`. Heel Nederland staat al in de database, dus er wordt niets opgehaald uit OpenStreetMap. De app bewaart de laatste tien gezochte gebieden ook op de telefoon.
 
-1. zoekt de tekst één keer op bij de [PDOK Locatieserver](https://api.pdok.nl/bzk/locatieserver/search/v3_1/ui/) en bewaart het antwoord in `geocode_cache`. Een plaats krijgt een straal van 4 km, een straat 2 km, een adres of postcode 1,5 km;
-2. deelt de wereld op in vakjes van 0,02° bij 0,03° (ongeveer 2 bij 2 km) en kijkt in `osm_cells` welke vakjes in die straal nog nooit, of langer dan 30 dagen geleden, uit OpenStreetMap zijn gehaald;
-3. haalt alleen die vakjes op bij Overpass (hooguit 48 per keer, de dichtstbijzijnde eerst) en slaat ze op met `import_osm_area()`, met dezelfde regels als de stadsimport. overpass-api.de blokkeert het netwerk van Supabase (elk verzoek krijgt 406), dus de functie vraagt het eerst twee keer aan de server van VK (maps.mail.ru), daarna aan overpass.private.coffee en pas als laatste aan overpass-api.de;
-4. antwoordt met `area_export()`: hetzelfde formaat als de stad-export, dichtstbijzijnde eerst, plus `radius_m` en `search`.
-
-Na een melding vraagt de app de functie om het vakje van die plek opnieuw op te halen, als dat langer dan een uur geleden is. Zo komen verbeteringen in OpenStreetMap snel binnen. Alle gebruikers samen starten hooguit 30 Overpass-aanvragen per 10 minuten (`osm_fetches`). Lukt Overpass niet, dan antwoordt de functie met wat er al in de database staat en probeert hij het bij de volgende zoekopdracht opnieuw.
-
-Zoekt iemand een gebied dat al is opgehaald, dan kost dat alleen een databasevraag. De app bewaart de laatste tien gezochte gebieden ook op de telefoon.
-
-De tests van de functie draaien met Node (22.18 of nieuwer):
-
-```bash
-node --test supabase/functions/search/search.test.ts
-```
+De tests van het zoeken staan in `backend/test/search.test.ts`.
 
 ## Keuzes die afwijken van het plan of het aanvullen
 
@@ -149,25 +124,34 @@ node --test supabase/functions/search/search.test.ts
 - **Taal:** Nederlands en Engels. Standaard volgt de app de taal van de telefoon. Vanaf Android 13 bewaart Android de keuze (en staat hij ook in de Android-instellingen van de app); op oudere versies doet de app dat zelf. De tests zetten de app op Nederlands, ook op de Engelse emulator in CI.
 - **Misbruik:** gebruikers kunnen `trust_score`, `user_id` en `reported_at` niet zelf zetten. Er geldt een daglimiet: 20 meldingen voor anonieme accounts en 60 voor gewone. Dat zijn startwaarden.
 - **Locatie:** de app vraagt de locatie pas na een korte uitleg bovenaan de lijst, en alleen tijdens gebruik. Een globale locatie (Android 12+) werkt ook; de app legt dan uit waarom een precieze beter is. De locatie gaat nergens heen: de app sorteert en rekent afstanden op de telefoon uit.
-- **Melden:** de eerste melding maakt via Supabase een anoniem account aan (supabase-kt); daarna gaan meldingen rechtstreeks naar `place_reports`. De app past een melding meteen op de telefoon toe, en bij het volgende verversen staat hij bij iedereen.
-- **Stad-export uit de database:** de export wordt bij elke aanvraag live opgebouwd (zo'n 65 KB voor Utrecht) in plaats van als bestand in Storage. Dat scheelt een exportstap en een dagelijkse taak. Bij veel gebruikers kan er een cache of CDN voor.
-- **Kaart:** tijdens de ontwikkeling gebruikt de app de gratis stijl van OpenFreeMap. Kies vóór de launch een tegelprovider.
+- **Melden:** de eerste melding maakt een anoniem account aan (`POST /v1/accounts`); de app bewaart het token en stuurt het mee met elke melding. Kent de server het account niet meer, dan maakt de app een nieuw. De app past een melding meteen op de telefoon toe, en bij het volgende verversen staat hij bij iedereen.
+- **Eigen backend in plaats van Supabase:** alles draait op de eigen VPS, zonder diensten van anderen behalve PDOK voor het zoeken en GitHub voor het extractbestand. De database werkt zoals bij Supabase: dezelfde rollen (`anon`, `authenticated`, `service_role`) en `auth.uid()` uit `database/platform.sql`, zodat de migraties en RLS-regels niet hoefden te veranderen. De API-gebruiker in Postgres mag alleen naar die rollen wisselen.
+- **Stad-export uit de database:** de export wordt bij elke aanvraag live opgebouwd (zo'n 65 KB voor Utrecht) in plaats van als bestand. Dat scheelt een exportstap en een dagelijkse taak. Bij veel gebruikers kan er een cache voor.
+- **Kaart:** OpenFreeMap: gratis, zonder sleutel, en commercieel gebruik mag. Bij de donkere weergave de stijl `dark`. Laadt OpenFreeMap niet, dan valt de kaart terug op VersaTiles, een tweede gratis dienst. De adressen staan in `gradle.properties`.
+- **Delta-sync:** de app haalt de hele stad de eerste keer en daarna eens per week. Daartussen haalt hij met `city_changes()` alleen de plekken die veranderd zijn sinds de vorige download, plus de ids van plekken die weg zijn. Lukt dat niet (bijvoorbeeld een database zonder die functie), dan haalt hij alsnog de hele stad.
+- **Geen Overpass:** heel Nederland komt elke nacht uit de Geofabrik-extract. De openbare Overpass-servers zaten vaak vol, en een eigen Overpass-server kost gigabytes; de extract maakt beide overbodig. Verbeteringen in OpenStreetMap zijn daardoor hooguit een dag oud.
+- **Steden:** een plek hoort bij een stad als hij in die gemeente ligt (de grens uit OpenStreetMap, `admin_level` 8). De stad-export (`city_export()`) is er voor de steden in de tabel `cities`; zoeken werkt overal.
+- **Opruimen:** een anoniem account ontstaat bij de eerste melding. Komt die melding nooit aan, dan blijft er een leeg account over; `delete_idle_anonymous_accounts()` verwijdert die na 30 dagen; de API draait dat elke nacht. Meldt zo'n telefoon later toch iets, dan maakt de app een nieuw account.
+- **Seeding:** bezoeken uit de checklist gaan via `seed_reports()` de database in als meldingen van één seed-account, met de tijd van het bezoek. Gebruikers kunnen niet als dat account melden.
 - **applicationId:** `nl.beandesk.app`. Wil je een ander, verander het dan vóór de eerste release in de Play Store.
 
 ## Nog te doen voor de MVP
 
 - [x] Eigen locatie: permissie alleen tijdens gebruik (ook globaal), blauwe stip, sorteren op afstand
-- [x] Snel melden: anoniem inloggen (supabase-kt) en het meldscherm
-- [x] Supabase-project met de zaken van Utrecht en een wekelijkse import
-- [ ] Delta-sync: alleen gewijzigde zaken ophalen in plaats van de hele export
+- [x] Snel melden: anoniem account en het meldscherm
+- [x] Database met de zaken van heel Nederland en een nachtelijke import
+- [x] Delta-sync: alleen gewijzigde zaken ophalen in plaats van de hele export
 - [x] Detailpagina met openingstijden per dag
 - [x] Zoeken op naam, plaats, adres of postcode, met opslag van nieuwe gebieden in de database
-- [ ] Overpass: de openbare servers zitten vaak vol. Bij veel gebruikers een eigen Overpass-instantie of een betaalde dienst
-- [ ] Tegelprovider kiezen en de kaartstijl instellen
-- [ ] CAPTCHA (hCaptcha of Turnstile) bij anoniem inloggen, vóór de launch; tijdens het testen staat CAPTCHA-bescherming in Supabase uit
-- [ ] Opruimen van oude anonieme accounts zonder meldingen
+- [x] Overpass: geschrapt; heel Nederland komt elke nacht uit de Geofabrik-extract
+- [x] Tegelprovider kiezen en de kaartstijl instellen: OpenFreeMap, licht en donker, met VersaTiles als reserve
+- [x] Eigen backend op de VPS, met DuckDNS ([docs/vps.md](docs/vps.md)); nog neerzetten op de VPS
+- [ ] Eigen domein in plaats van DuckDNS, vóór de eerste openbare release (het adres zit vast in de app)
+- [ ] Privacyverklaring en "account verwijderen" ook als webpagina, voor de Play Store
+- [ ] CAPTCHA of iets vergelijkbaars bij het aanmaken van accounts; nu beperkt de API dat tot 30 per uur per IP-adres
+- [x] Opruimen van oude anonieme accounts zonder meldingen
 - [x] Privacyverklaring en "account verwijderen" in de app (laat de privacyverklaring vóór de launch nog nakijken en zet er een contactadres in)
-- [ ] Seeding: 30-50 zaken in een of twee buurten
+- [ ] Seeding: 30-50 zaken in een of twee buurten. De checklist voor Amsterdam Binnenstad en het importcommando staan klaar ([docs/seeding](docs/seeding)); de bezoeken zelf nog doen
 
 ## Ideeën voor later
 

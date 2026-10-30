@@ -2,28 +2,24 @@ package nl.beandesk.app.data.remote
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
+import io.ktor.http.encodeURLPathPart
 import nl.beandesk.core.export.CityExport
 import nl.beandesk.core.export.CityExportParser
 
 /**
- * Downloads the city export from the database function `city_export`
- * (supabase/migrations), so it always includes the latest reports.
+ * Downloads the city export from BeanDesk's server (backend/), which the database builds live
+ * (city_export), so it always has the latest reports; or only what changed since (city_changes).
  */
-class CityExportClient(
-    private val http: HttpClient,
-    private val supabaseUrl: String,
-    private val anonKey: String,
-) : CityExportSource {
-    override suspend fun fetch(city: String): CityExport {
-        val body = http.get("$supabaseUrl/rest/v1/rpc/city_export") {
-            parameter("p_city", city)
-            header("apikey", anonKey)
-            header(HttpHeaders.Authorization, "Bearer $anonKey")
-        }.bodyAsText()
-        return CityExportParser.parse(body)
-    }
+class CityExportClient(private val http: HttpClient, apiUrl: String) : CityExportSource {
+    private val base = apiUrl.trimEnd('/')
+
+    override suspend fun fetch(city: String): CityExport =
+        CityExportParser.parse(http.get("$base/v1/cities/${city.encodeURLPathPart()}").bodyAsText())
+
+    override suspend fun fetchChanges(city: String, since: String): CityExport =
+        CityExportParser.parse(
+            http.get("$base/v1/cities/${city.encodeURLPathPart()}/changes") { parameter("since", since) }.bodyAsText(),
+        )
 }

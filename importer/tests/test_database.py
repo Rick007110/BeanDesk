@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -118,17 +119,6 @@ def test_import_refuses_to_delete_most_of_a_city(conn, overpass_elements):
 def test_unknown_city_is_refused(conn, overpass_elements):
     with pytest.raises(psycopg.errors.RaiseException, match="unknown_city"):
         db.import_elements(conn, "atlantis", overpass_elements)
-
-
-def test_overpass_query(conn):
-    query = conn.execute("select public.overpass_query('utrecht')").fetchone()[0]
-    assert '["admin_level"="8"]["name"="Utrecht"]' in query
-    assert 'nwr["amenity"~"^(cafe|library|coworking_space)$"](area.city);' in query
-    assert query.endswith("out center tags;")
-
-    conn.execute("insert into public.cities (slug, name) values ('den-bosch', 'Den \"Bosch\"')")
-    quoted = conn.execute("select public.overpass_query('den-bosch')").fetchone()[0]
-    assert '["name"="Den \\"Bosch\\""]' in quoted
 
 
 def test_users_cannot_run_imports(conn, overpass_elements):
@@ -276,11 +266,8 @@ def import_area(conn, cells, elements) -> dict:
     ).fetchone()[0]
 
 
-def missing_cells(conn, lat=52.09, lng=5.12, radius=2000, max_age="30 days") -> set[tuple[int, int]]:
-    rows = conn.execute(
-        "select lat_index, lng_index from public.missing_osm_cells(%s, %s, %s, %s::interval)", (lat, lng, radius, max_age)
-    ).fetchall()
-    return {(r[0], r[1]) for r in rows}
+def imported_cells(conn) -> set[tuple[int, int]]:
+    return {(r[0], r[1]) for r in conn.execute("select lat_index, lng_index from public.osm_cells").fetchall()}
 
 
 def area_export(conn, lat=52.0911, lng=5.1201, radius=2000, label="Utrecht") -> dict:
@@ -289,28 +276,28 @@ def area_export(conn, lat=52.0911, lng=5.1201, radius=2000, label="Utrecht") -> 
     ).fetchone()[0]
 
 
-def test_missing_cells_cover_the_radius_and_skip_fresh_ones(conn):
-    before = missing_cells(conn)
-    # 2 km around (52.09, 5.12): 3 rows of cells (0.02° lat) by 3 columns (0.03° lng).
-    assert len(before) == 9
-    assert (2604, 170) in before
-
-    conn.execute("insert into public.osm_cells (lat_index, lng_index) values (2604, 170)")
-    conn.execute("insert into public.osm_cells (lat_index, lng_index, fetched_at) values (2604, 171, now() - interval '40 days')")
-    after = missing_cells(conn)
-    assert (2604, 170) not in after
-    # Older than 30 days counts as missing again.
-    assert (2604, 171) in after
-    assert len(after) == 8
-
-
 def test_area_import_adds_places_without_a_city_and_marks_cells(conn, overpass_elements):
     result = import_area(conn, FIXTURE_CELLS, overpass_elements)
     assert (result["inserted"], result["updated"], result["deleted"]) == (4, 0, 0)
 
     cities = conn.execute("select distinct city from public.places").fetchall()
     assert cities == [(None,)]
-    assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+    assert imported_cells(conn) == {(2604, 170), (2604, 171)}
+
+
+def test_the_municipality_from_the_extract_is_the_city(conn, overpass_elements):
+    in_utrecht = [{**e, "gemeente": "Utrecht"} for e in overpass_elements if e["id"] != 3003]
+    elsewhere = [{**e, "gemeente": "Stichtse Vecht"} for e in overpass_elements if e["id"] == 3003]
+    import_area(conn, FIXTURE_CELLS, in_utrecht + elsewhere)
+    cities = {r[0]: r[1] for r in conn.execute("select osm_id, city from public.places").fetchall()}
+    assert cities == {1001: "utrecht", 2002: "utrecht", 8008: "utrecht", 3003: None}
+    assert {p["osm_id"] for p in db.city_export(conn, "utrecht")["places"]} == {1001, 2002, 8008}
+
+    # Unchanged on the next import, so it does not count as a change for the app.
+    conn.execute("update public.places set updated_at = now() - interval '1 hour'")
+    import_area(conn, FIXTURE_CELLS, in_utrecht + elsewhere)
+    changed = conn.execute("select count(*) from public.places where updated_at > now() - interval '1 minute'").fetchone()[0]
+    assert changed == 0
 
 
 def test_area_import_keeps_the_city_of_known_places(conn, overpass_elements):
@@ -361,27 +348,15 @@ def test_area_export_writes_places_exactly_like_the_city_export(conn, overpass_e
     assert by_area == by_city
 
 
-def test_place_location(conn, overpass_elements):
-    db.import_elements(conn, "utrecht", overpass_elements)
-    library = place_id(conn, 2002)
-    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() == pytest.approx((52.0927, 5.1196))
-
-    conn.execute("update public.places set deleted_at = now() where id = %s", (library,))
-    assert conn.execute("select * from public.place_location(%s)", (library,)).fetchone() is None
-
-
 def test_the_search_function_role_can_do_its_work(conn, overpass_elements):
     with conn.transaction():
         conn.execute("set local role service_role")
         import_area(conn, FIXTURE_CELLS, overpass_elements)
-        conn.execute("insert into public.osm_fetches (cells, elements) values (2, 8)")
         conn.execute(
             "insert into public.geocode_cache (query, label, kind, lat, lng) values ('utrecht', 'Utrecht', 'woonplaats', 52.09, 5.12)"
             " on conflict (query) do update set label = excluded.label"
         )
-        assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
         assert len(area_export(conn)["places"]) == 4
-        assert conn.execute("select * from public.place_location(%s)", (place_id(conn, 1001),)).fetchone() is not None
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])
@@ -389,9 +364,7 @@ def test_the_search_function_role_can_do_its_work(conn, overpass_elements):
     "statement",
     [
         "select public.area_export(52.09, 5.12, 1000, 'x')",
-        "select * from public.missing_osm_cells(52.09, 5.12, 1000)",
         "select public.import_osm_area('[]', '[]')",
-        "select * from public.place_location(1)",
         "select * from public.geocode_cache",
         "insert into public.osm_cells (lat_index, lng_index) values (1, 1)",
     ],
@@ -413,7 +386,7 @@ def test_extract_import_adds_places_and_marks_its_cells(conn, overpass_elements)
     result = conn.execute("select public.import_osm_extract(%s)", (psycopg.types.json.Jsonb(data),)).fetchone()[0]
 
     assert (result["cells"], result["inserted"], result["generated_at"]) == (2, 4, "2026-11-01T02:30:00+00:00")
-    assert missing_cells(conn).isdisjoint({(2604, 170), (2604, 171)})
+    assert imported_cells(conn) == {(2604, 170), (2604, 171)}
     assert len(area_export(conn)["places"]) == 4
 
 
@@ -671,3 +644,129 @@ def test_only_a_signed_in_user_can_delete_an_account_and_only_their_own(conn):
     with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
         as_user(conn, create_user(conn))
         conn.execute("select public.recompute_place_community(1)")
+
+
+# --- Changes since the last download, idle accounts, seeding --------------------------------
+
+def generated_at(conn) -> str:
+    """An export's generated_at a while ago, past the five minutes of overlap."""
+    return conn.execute("select now() - interval '10 minutes'").fetchone()[0]
+
+
+def age_everything(conn):
+    """Makes every row look ten minutes older than the last download, so nothing counts as changed."""
+    conn.execute("update public.places set updated_at = now() - interval '1 hour'")
+    conn.execute("update public.place_community set updated_at = now() - interval '1 hour'")
+    conn.execute("update public.place_rating_summary set updated_at = now() - interval '1 hour'")
+
+
+def test_changes_hold_only_what_changed_since_the_last_download(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    reported, rated = place_id(conn, 1001), place_id(conn, 2002)
+    age_everything(conn)
+    since = generated_at(conn)
+
+    unchanged = db.city_changes(conn, "utrecht", since)
+    assert unchanged["places"] == [] and unchanged["removed"] == []
+
+    report_as(conn, create_user(conn), reported, wifi="fast")
+    rate_as(conn, create_user(conn), rated, 5)
+    conn.execute("update public.places set deleted_at = now(), updated_at = now() where osm_id = 3003")
+    conn.execute("update public.places set hidden = true where osm_id = 8008")
+
+    changes = db.city_changes(conn, "utrecht", since)
+    assert {p["osm_id"] for p in changes["places"]} == {1001, 2002}
+    assert sorted(changes["removed"]) == sorted([place_id(conn, 3003), place_id(conn, 8008)])
+    changed = {p["osm_id"]: p for p in changes["places"]}
+    assert changed[1001]["community"]["wifi"] == "fast"
+    assert changed[2002]["rating"] == {"average": 5.0, "count": 1}
+    # Same format as the full export, plus what it is relative to.
+    full = db.city_export(conn, "utrecht")
+    assert changed[1001] == next(p for p in full["places"] if p["osm_id"] == 1001)
+    assert changes["since"] is not None and changes["generated_at"] is not None
+
+
+def test_a_place_whose_last_report_went_counts_as_changed(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    user = create_user(conn)
+    report_as(conn, user, cafe, wifi="fast")
+    age_everything(conn)
+    since = generated_at(conn)
+
+    conn.execute("delete from public.place_reports where user_id = %s", (user,))
+
+    changed = {p["osm_id"]: p for p in db.city_changes(conn, "utrecht", since)["places"]}
+    assert changed[1001]["community"] is None
+
+
+def test_anyone_may_read_the_changes(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    since = generated_at(conn)
+    with conn.transaction():
+        conn.execute("set local role anon")
+        assert len(db.city_changes(conn, "utrecht", since)["places"]) == 4
+    assert db.city_changes(conn, "atlantis", since) is None
+
+
+def test_idle_anonymous_accounts_go_after_thirty_days(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    idle, recent, reporter, rater = (create_user(conn) for _ in range(4))
+    person = create_user(conn, anonymous=False)
+    conn.execute(
+        "update auth.users set created_at = now() - interval '31 days' where id = any(%s)",
+        ([idle, reporter, rater, person],),
+    )
+    report_as(conn, reporter, cafe, wifi="fast")
+    rate_as(conn, rater, cafe, 4)
+
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        assert conn.execute("select public.delete_idle_anonymous_accounts()").fetchone()[0] == 1
+
+    left = {r[0] for r in conn.execute("select id from auth.users").fetchall()}
+    assert idle not in left
+    assert {recent, reporter, rater, person} <= left
+
+
+def test_users_cannot_delete_other_accounts(conn):
+    for role in ("anon", "authenticated"):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+            conn.execute(f"set local role {role}")
+            conn.execute("select public.delete_idle_anonymous_accounts('0 seconds')")
+
+
+def test_seed_reports_count_at_the_time_of_the_visit(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    morning, afternoon = (conn.execute(f"select {dutch(at)}").fetchone()[0] for at in ("1 day 10:30", "1 day 15:00"))
+    # More than a person may report in a day, all in one batch.
+    rows = [
+        {"place_id": cafe, "visited_at": morning.isoformat(), "wifi": "fast", "power": "many", "quiet": True},
+        *({"place_id": cafe, "visited_at": afternoon.isoformat(), "quiet": False} for _ in range(70)),
+    ]
+    with conn.transaction():
+        conn.execute("set local role service_role")
+        assert db.seed_reports(conn, rows) == 71
+
+    community = next(p for p in db.city_export(conn, "utrecht")["places"] if p["osm_id"] == 1001)["community"]
+    assert community["wifi"] == "fast"
+    assert community["power"] == "many"
+    assert community["quiet"] is False
+    assert datetime.fromisoformat(community["last_report_at"]) == afternoon
+    assert community["quiet_by_daypart"] == {"morning": {"quiet": 1, "busy": 0}, "afternoon": {"quiet": 0, "busy": 70}}
+
+
+def test_users_cannot_seed_or_report_as_the_seed_account(conn, overpass_elements):
+    db.import_elements(conn, "utrecht", overpass_elements)
+    cafe = place_id(conn, 1001)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        conn.execute("set local role authenticated")
+        db.seed_reports(conn, [{"place_id": cafe, "visited_at": "2026-10-27T10:30:00+01:00", "wifi": "fast"}])
+
+    user = create_user(conn)
+    seeder = conn.execute("select public.seed_account_id()").fetchone()[0]
+    with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
+        as_user(conn, user)
+        conn.execute("insert into public.place_reports (place_id, user_id, wifi) values (%s, %s, 'fast')", (cafe, seeder))

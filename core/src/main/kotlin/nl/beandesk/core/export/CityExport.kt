@@ -18,7 +18,11 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
-/** All places of one city, as written by the import script (`importer/beandesk_import/export.py`). */
+/**
+ * All places of one city, as the database writes them (`city_export`), or only what changed since
+ * an earlier export (`city_changes`): then [since] is that export's generatedAt, [places] holds
+ * the changed places and [removed] the ids of places that are gone.
+ */
 data class CityExport(
     val city: String,
     val timezone: String,
@@ -26,6 +30,8 @@ data class CityExport(
     val attribution: String,
     val center: LatLng?,
     val places: List<ExportedPlace>,
+    val since: String? = null,
+    val removed: List<Long> = emptyList(),
 )
 
 data class ExportedPlace(val place: Place, val updatedAt: String)
@@ -50,6 +56,8 @@ object CityExportParser {
             center = dto.center?.let { LatLng(it.lat, it.lng) },
             // Categories from a newer export are skipped instead of failing the whole sync.
             places = dto.places.mapNotNull { it.toExportedPlace() },
+            since = dto.since,
+            removed = dto.removed,
         )
     }
 
@@ -102,6 +110,8 @@ private data class CityExportDto(
     val attribution: String,
     val center: LatLngDto? = null,
     val places: List<PlaceDto>,
+    val since: String? = null,
+    val removed: List<Long> = emptyList(),
 )
 
 @Serializable

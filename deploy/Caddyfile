@@ -1,0 +1,5 @@
+# HTTPS for the DuckDNS name (DOMAIN in .env), with a certificate from Let's Encrypt, to the API.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:{$PORT}
+}

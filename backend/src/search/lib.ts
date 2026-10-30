@@ -1,4 +1,4 @@
-// Pure helpers for the search function: no Deno or network, so Node can test them too.
+// Pure helpers for the search: no database or network.
 
 /** Searches work in the Netherlands for now (PDOK only knows Dutch places); a margin covers the border. */
 const COVERAGE = { south: 50.6, north: 53.7, west: 3.0, east: 7.4 };
@@ -28,15 +28,6 @@ export interface Geocoded {
   kind: GeoKind;
   lat: number;
   lng: number;
-}
-
-export interface Cell {
-  lat_index: number;
-  lng_index: number;
-  south: number;
-  west: number;
-  north: number;
-  east: number;
 }
 
 const MAX_QUERY_LENGTH = 100;
@@ -93,28 +84,6 @@ export function parsePdok(body: unknown): Geocoded | null {
 
 const METERS_PER_DEGREE = 111_320;
 
-function distanceToCellMeters(cell: Cell, lat: number, lng: number): number {
-  const dLat = (lat - (cell.south + cell.north) / 2) * METERS_PER_DEGREE;
-  const dLng = (lng - (cell.west + cell.east) / 2) * METERS_PER_DEGREE * Math.cos((lat * Math.PI) / 180);
-  return Math.hypot(dLat, dLng);
-}
-
-/** Keeps the [max] cells nearest to the point; the rest follow with the next search. */
-export function pickCells(cells: Cell[], lat: number, lng: number, max: number): { chosen: Cell[]; left: number } {
-  const sorted = [...cells].sort((a, b) => distanceToCellMeters(a, lat, lng) - distanceToCellMeters(b, lat, lng));
-  return { chosen: sorted.slice(0, max), left: Math.max(0, sorted.length - max) };
-}
-
-const bound = (value: number) => value.toFixed(5);
-
-/** One Overpass request for all cells: the same places as the city import, per bounding box. */
-export function overpassQuery(cells: Cell[]): string {
-  const boxes = cells
-    .map((c) => `nwr["amenity"~"^(cafe|library|coworking_space)$"](${bound(c.south)},${bound(c.west)},${bound(c.north)},${bound(c.east)});`)
-    .join("");
-  return `[out:json][timeout:25];(${boxes});out center tags;`;
-}
-
 /** Lowercase without accents, so "cafe" and "Café" compare equal. */
 export function foldText(text: string): string {
   return text.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().trim();
@@ -154,23 +123,18 @@ export function placeSplits(query: string): { name: string; place: string }[] {
 
 export interface SearchRequest {
   /** A name, place or address to look up, normalized (see normalizeQuery). */
-  query: string | null;
+  query: string;
   /** The same text as typed, for showing the results under. */
-  display: string | null;
-  /** A place that was reported on: its surroundings are fetched again. */
-  refreshPlaceId: number | null;
+  display: string;
 }
 
-/** Accepts {q} or {refresh_place_id}; nothing else is trusted from the app. */
+/** Accepts {q}; nothing else is trusted from the app. */
 export function parseRequest(body: unknown): SearchRequest | null {
   if (typeof body !== "object" || body === null) return null;
-  const { q, refresh_place_id: refresh } = body as Record<string, unknown>;
-  if (typeof refresh === "number" && Number.isSafeInteger(refresh) && refresh > 0) {
-    return { query: null, display: null, refreshPlaceId: refresh };
-  }
+  const { q } = body as Record<string, unknown>;
   const query = normalizeQuery(q);
   if (!query) return null;
   // deno-lint-ignore no-control-regex
   const display = (q as string).replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
-  return { query, display, refreshPlaceId: null };
+  return { query, display };
 }
